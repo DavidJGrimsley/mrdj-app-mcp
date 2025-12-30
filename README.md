@@ -9,6 +9,17 @@ Model Context Protocol (MCP) server that surfaces my Expo/React Native web and m
 - File-based content under `guides/` packaged as MCP resources
 - Plesk-friendly: no native deps, static build output; can also be hosted on any Node-capable platform or container
 
+## What this MCP covers and assumes you are using(guided by the docs)
+- Architecture patterns: Expo app layout, module boundaries, routing vs screens.
+- State management: Zustand store patterns, selectors, persistence.
+- Data: Drizzle ORM + Supabase schema guidance, RLS, migrations, seed/fixtures.
+- Styling: NativeWind setup, design tokens, responsive/theming approaches.
+- Routing: Expo Router conventions, file-based routes, guards, deep linking.
+- Animation: Reanimated 4 guidance (worklets, transitions, thread separation).
+- Performance & SEO: startup, rerender control, list tuning, compiler hints, metadata.
+- Build scripts: local build/export scripts, sitemap generation, API build.
+- Deployment: Plesk deployment notes for static web and API, plus reverse-proxy fit.
+
 ## Why it fits Plesk (and beyond)
 - Single Node process with no extra services; easy to run under Plesk’s Node support or as a proxied app.
 - Pure JS output (`build/`); no binaries, so it migrates cleanly to other hosts (Docker, bare VM, serverless HTTP wrapper).

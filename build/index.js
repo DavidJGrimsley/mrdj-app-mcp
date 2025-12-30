@@ -25,7 +25,7 @@ const guides = [
 const guideMap = new Map(guides.map((g) => [g.id, g]));
 function toFileUri(filePath) {
     const normalized = filePath.replace(/\\/g, "/");
-    return `file://${normalized}`;
+    return `file:///${normalized}`;
 }
 async function loadGuide(fileName) {
     const filePath = path.join(guidesDir, fileName);
