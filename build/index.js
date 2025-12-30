@@ -1,9 +1,12 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { z } from "zod";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import express from "express";
+import cors from "cors";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const guidesDir = path.join(__dirname, "..", "guides");
@@ -165,11 +168,59 @@ server.registerPrompt("routing-checklist", {
     };
 });
 async function main() {
-    const transport = new StdioServerTransport();
-    await server.connect(transport);
-    console.error("mrdj-app-mcp MCP server running on stdio");
-    // Keep process alive - without this, Node may exit
-    process.stdin.resume();
+    // Check for --http-port flag
+    const args = process.argv.slice(2);
+    const httpPortIndex = args.indexOf("--http-port");
+    const useHttp = httpPortIndex !== -1 && args[httpPortIndex + 1];
+    if (useHttp) {
+        const port = parseInt(args[httpPortIndex + 1], 10);
+        if (isNaN(port)) {
+            console.error("Invalid port number");
+            process.exit(1);
+        }
+        // HTTP/SSE mode
+        const app = express();
+        // Enable CORS for open access
+        app.use(cors({
+            origin: "*", // Allow all origins for open access
+            methods: ["GET", "POST", "OPTIONS"],
+            allowedHeaders: ["Content-Type", "Authorization"]
+        }));
+        app.use(express.json());
+        // Health check endpoint
+        app.get("/health", (_req, res) => {
+            res.json({ status: "ok", service: "mrdj-app-mcp", version: "0.1.0" });
+        });
+        // MCP SSE endpoint
+        app.get("/sse", async (req, res) => {
+            console.error("New SSE connection established");
+            const transport = new SSEServerTransport("/message", res);
+            await server.connect(transport);
+        });
+        // MCP message endpoint
+        app.post("/message", async (req, res) => {
+            // This will be handled by the SSE transport
+            res.status(200).end();
+        });
+        const httpServer = app.listen(port, () => {
+            console.error(`mrdj-app-mcp MCP server running on http://localhost:${port}`);
+            console.error(`Health check: http://localhost:${port}/health`);
+            console.error(`MCP SSE endpoint: http://localhost:${port}/sse`);
+        });
+        // Keep server alive
+        process.on("SIGTERM", () => {
+            console.error("SIGTERM received, closing server");
+            httpServer.close();
+        });
+    }
+    else {
+        // Stdio mode (default)
+        const transport = new StdioServerTransport();
+        await server.connect(transport);
+        console.error("mrdj-app-mcp MCP server running on stdio");
+        // Keep process alive - without this, Node may exit
+        process.stdin.resume();
+    }
 }
 main().catch((error) => {
     console.error("Fatal error in main()", error);
