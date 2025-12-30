@@ -1,0 +1,27 @@
+{
+  "name": "mrdj-app-mcp",
+  "version": "0.1.0",
+  "description": "MCP server exposing local PokePages copilot guides as resources and prompts",
+  "type": "module",
+  "main": "./build/index.js",
+  "bin": {
+    "mrdj-app-mcp": "./build/index.js"
+  },
+  "files": ["build"],
+  "scripts": {
+    "build": "tsc -p .",
+    "start": "node ./build/index.js",
+    "dev": "ts-node ./src/index.ts",
+    "test": "echo \"No tests yet\" && exit 0"
+  },
+  "keywords": ["mcp", "resources", "prompts", "pokepages"],
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.25.1"
+  },
+  "devDependencies": {
+    "@types/node": "^25.0.3",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  }
+}
