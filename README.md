@@ -1,4 +1,5 @@
 # mrdj-app-mcp
+This is running on my VPS and can be used in any client like VS Code at [davidjgrimsley.com/mcp/mrdj-app-mcp/mcp](https://davidjgrimsley.com/mcp/mrdj-app-mcp/mcp). There is a more in-depth info page at [davidjgrimsley.com/mcp/mrdj-app-mcp](https://davidjgrimsley.com/mcp/mrdj-app-mcp).
 
 Model Context Protocol (MCP) server that surfaces my Expo/React Native web and mobile guidance (PokePages) as structured resources. Built to run locally or behind a reverse proxy (e.g., Plesk) so AI tools can query the same docs I use.
 
@@ -69,11 +70,12 @@ pm2 startup  # Follow instructions to enable on boot
 
 **4. Configure NGINX reverse proxy**
 
-Add to your NGINX site config (typically `/etc/nginx/sites-available/davidjgrimsley.com`):
+Add to your NGINX site config (typically `/etc/nginx/sites-available/yourdomain.com`):
 
 ```nginx
-location /mcp/mrdj-app-mcp/ {
-    proxy_pass http://localhost:4000/;
+# MCP endpoint (Streamable HTTP + SSE)
+location /mcp/mrdj-app-mcp/mcp {
+    proxy_pass http://localhost:4000/mcp;
     proxy_http_version 1.1;
     proxy_set_header Upgrade $http_upgrade;
     proxy_set_header Connection 'upgrade';
@@ -82,12 +84,42 @@ location /mcp/mrdj-app-mcp/ {
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
     proxy_cache_bypass $http_upgrade;
-    
-    # SSE support
+
+    # SSE support - critical for MCP
     proxy_buffering off;
-    proxy_read_timeout 86400;
+    proxy_read_timeout 86400s;
+    proxy_send_timeout 86400s;
+
+    # CORS headers
+    add_header Access-Control-Allow-Origin * always;
+    add_header Access-Control-Allow-Methods 'GET, POST, OPTIONS' always;
+    add_header Access-Control-Allow-Headers 'Content-Type, Authorization' always;
+}
+
+# SSE message POST endpoint (required for legacy SSE transport)
+location /mcp/mrdj-app-mcp/messages {
+    proxy_pass http://localhost:4000/mcp/messages;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    
+    # Don't buffer - SSE transport needs raw stream
+    proxy_buffering off;
+    
+    add_header Access-Control-Allow-Origin * always;
+}
+
+# Health check endpoint
+location /mcp/mrdj-app-mcp/health {
+    proxy_pass http://localhost:4000/health;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
 }
 ```
+
+> **Important**: The `/messages` endpoint is critical! MCP clients using SSE transport will POST messages to this path. Without it, you'll see "Cannot POST /mcp/messages" errors.
 
 Test and reload:
 ```bash
@@ -98,16 +130,37 @@ sudo systemctl reload nginx
 **5. Verify deployment**
 ```bash
 # Health check
-curl https://DavidJGrimsley.com/mcp/mrdj-app-mcp/health
+curl https://yourdomain.com/mcp/mrdj-app-mcp/health
 
 # Should return: {"status":"ok","service":"mrdj-app-mcp","version":"0.1.0"}
 ```
+
+### Troubleshooting
+
+| Issue | Cause | Fix |
+|-------|-------|-----|
+| "Cannot POST /mcp/messages" | Missing `/messages` nginx location | Add the messages endpoint proxy (see nginx config above) |
+| "Session not found" | Session ID mismatch | Ensure nginx passes query params to `/mcp/messages` |
+| "stream is not readable" | Body parser consuming stream | Server skips JSON parsing for `/messages` routes automatically |
+| Connection drops after ~60s | Proxy timeout | Set `proxy_read_timeout 86400s` in nginx; server sends heartbeats every 30s |
 
 ### Using the HTTP endpoint in MCP clients
 
 Configure your MCP client to connect to:
 ```
-https://DavidJGrimsley.com/mcp/mrdj-app-mcp/mcp
+https://yourdomain.com/mcp/mrdj-app-mcp/mcp
+```
+
+**VS Code example** (in `.vscode/mcp.json` or user settings):
+```json
+{
+  "servers": {
+    "mrdj-app-mcp": {
+      "type": "sse",
+      "url": "https://yourdomain.com/mcp/mrdj-app-mcp/mcp"
+    }
+  }
+}
 ```
 
 The server provides open access (no authentication) so anyone can use the guides in their IDE or MCP-compatible tools.

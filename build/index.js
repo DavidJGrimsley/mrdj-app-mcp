@@ -1,8 +1,10 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { z } from "zod";
 import { readFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import express from "express";
@@ -186,26 +188,157 @@ async function main() {
             methods: ["GET", "POST", "OPTIONS"],
             allowedHeaders: ["Content-Type", "Authorization"]
         }));
-        app.use(express.json());
+        // External path clients will POST to (through nginx)
+        const sseMessagesPathExternal = "/mcp/mrdj-app-mcp/messages";
+        // Internal path nginx proxies to
+        const sseMessagesPathInternal = "/mcp/messages";
+        // Apply JSON body parsing only to non-SSE message routes
+        // SSE transport needs raw stream access
+        app.use((req, res, next) => {
+            if (req.path === sseMessagesPathExternal || req.path === sseMessagesPathInternal) {
+                // Skip body parsing for SSE message endpoints
+                next();
+            }
+            else {
+                express.json()(req, res, next);
+            }
+        });
+        // Store transports by session ID (for both Streamable HTTP and SSE)
+        const transports = {};
+        const sseTransports = {};
         // Health check endpoint
         app.get("/health", (_req, res) => {
             res.json({ status: "ok", service: "mrdj-app-mcp", version: "0.1.0" });
         });
-        // MCP SSE endpoint
-        app.get("/sse", async (req, res) => {
-            console.error("New SSE connection established");
-            const transport = new SSEServerTransport("/message", res);
-            await server.connect(transport);
+        // Store heartbeat intervals for cleanup
+        const sseHeartbeats = {};
+        // MCP endpoint (Streamable HTTP + SSE fallback). VS Code should point here.
+        app.all("/mcp", async (req, res) => {
+            const sessionId = req.headers['mcp-session-id'];
+            const acceptHeader = req.headers.accept || "";
+            const isSseRequest = req.method === "GET" && acceptHeader.includes("text/event-stream") && !sessionId;
+            if (isSseRequest) {
+                console.error("Handling legacy SSE MCP request");
+                // Use external path so client POSTs to the right nginx location
+                const transport = new SSEServerTransport(sseMessagesPathExternal, res);
+                // Store the SSE transport by its actual session ID (set by the transport)
+                // The transport's sessionId is available after construction
+                const actualSessionId = transport.sessionId;
+                sseTransports[actualSessionId] = transport;
+                console.error(`SSE session created with transport sessionId: ${actualSessionId}`);
+                // Send SSE heartbeat every 30 seconds to keep connection alive
+                const heartbeatInterval = setInterval(() => {
+                    try {
+                        if (!res.writableEnded) {
+                            res.write(`:heartbeat\n\n`);
+                        }
+                        else {
+                            clearInterval(heartbeatInterval);
+                            delete sseHeartbeats[actualSessionId];
+                        }
+                    }
+                    catch (error) {
+                        console.error(`Heartbeat error for session ${actualSessionId}:`, error);
+                        clearInterval(heartbeatInterval);
+                        delete sseHeartbeats[actualSessionId];
+                    }
+                }, 30000);
+                sseHeartbeats[actualSessionId] = heartbeatInterval;
+                transport.onclose = () => {
+                    console.error(`SSE session closed: ${actualSessionId}`);
+                    if (sseHeartbeats[actualSessionId]) {
+                        clearInterval(sseHeartbeats[actualSessionId]);
+                        delete sseHeartbeats[actualSessionId];
+                    }
+                    delete sseTransports[actualSessionId];
+                };
+                // Also handle response close event
+                res.on('close', () => {
+                    if (sseHeartbeats[actualSessionId]) {
+                        clearInterval(sseHeartbeats[actualSessionId]);
+                        delete sseHeartbeats[actualSessionId];
+                    }
+                });
+                try {
+                    await server.connect(transport);
+                }
+                catch (error) {
+                    console.error("Error handling SSE MCP request:", error);
+                    if (sseHeartbeats[actualSessionId]) {
+                        clearInterval(sseHeartbeats[actualSessionId]);
+                        delete sseHeartbeats[actualSessionId];
+                    }
+                    delete sseTransports[actualSessionId];
+                    if (!res.headersSent) {
+                        res.status(500).json({ error: "Internal server error" });
+                    }
+                }
+                return;
+            }
+            console.error(`${req.method} /mcp session: ${sessionId || 'new'} Accept: ${acceptHeader}`);
+            let transport;
+            if (sessionId && transports[sessionId]) {
+                transport = transports[sessionId];
+                console.error(`Reusing transport for session ${sessionId}`);
+            }
+            else {
+                console.error('Creating new transport');
+                transport = new StreamableHTTPServerTransport({
+                    sessionIdGenerator: () => randomUUID(),
+                    onsessioninitialized: (newSessionId) => {
+                        console.error(`New MCP session initialized: ${newSessionId}`);
+                        transports[newSessionId] = transport;
+                    }
+                });
+                transport.onclose = () => {
+                    const sid = Object.keys(transports).find(k => transports[k] === transport);
+                    if (sid) {
+                        console.error(`MCP session closed: ${sid}`);
+                        delete transports[sid];
+                    }
+                };
+                console.error('Connecting server to transport');
+                await server.connect(transport);
+                console.error('Server connected to transport');
+            }
+            try {
+                await transport.handleRequest(req, res);
+            }
+            catch (error) {
+                console.error('Error handling MCP request:', error);
+                if (!res.headersSent) {
+                    res.status(500).json({ error: 'Internal server error' });
+                }
+            }
         });
-        // MCP message endpoint
-        app.post("/message", async (req, res) => {
-            // This will be handled by the SSE transport
-            res.status(200).end();
-        });
+        // SSE Messages endpoint - handle both internal path (nginx proxied) and external path
+        const handleSseMessage = async (req, res) => {
+            const sessionId = req.query.sessionId;
+            console.error(`SSE POST message received, sessionId: ${sessionId}`);
+            const transport = sseTransports[sessionId];
+            if (transport) {
+                try {
+                    await transport.handlePostMessage(req, res);
+                }
+                catch (error) {
+                    console.error("Error handling SSE message:", error);
+                    if (!res.headersSent) {
+                        res.status(500).json({ error: "Internal server error" });
+                    }
+                }
+            }
+            else {
+                console.error(`No SSE transport found for session: ${sessionId}`);
+                res.status(404).json({ error: "Session not found" });
+            }
+        };
+        // Register both paths for SSE messages (internal for nginx proxy, external for direct)
+        app.post(sseMessagesPathInternal, handleSseMessage);
+        app.post(sseMessagesPathExternal, handleSseMessage);
         const httpServer = app.listen(port, () => {
             console.error(`mrdj-app-mcp MCP server running on http://localhost:${port}`);
             console.error(`Health check: http://localhost:${port}/health`);
-            console.error(`MCP SSE endpoint: http://localhost:${port}/sse`);
+            console.error(`MCP endpoint: http://localhost:${port}/mcp`);
         });
         // Keep server alive
         process.on("SIGTERM", () => {
