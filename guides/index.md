@@ -5,7 +5,7 @@ This index replaces the old general guide. Each topic now lives in its own focus
 - [architecture.md](architecture.md) — App layout, module boundaries, platform files, routing vs screens.
 - [stateManagement.md](stateManagement.md) — Zustand patterns, store structure, selectors, persistence.
 - [databaseArchitecture.md](databaseArchitecture.md) — Drizzle + Supabase schema, RLS, migrations, seed/fixtures.
-- [styling.md](styling.md) — NativeWind setup, design tokens, responsive patterns, theming.
+- [styling.md](styling.md) — Uniwind setup, tokens/theming in CSS, responsive patterns, migration notes.
 - [routing.md](routing.md) — Expo Router conventions, file-based routes, guards, linking.
 - [animation.md](animation.md) — Reanimated/worklets guidance, transitions, thread separation.
 - [performance.md](performance.md) — Startup, re-render control, lists, compiler, worklets, measurement.

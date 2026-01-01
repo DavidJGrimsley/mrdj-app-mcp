@@ -14,12 +14,64 @@ Model Context Protocol (MCP) server that surfaces my Expo/React Native web and m
 - Architecture patterns: Expo app layout, module boundaries, routing vs screens.
 - State management: Zustand store patterns, selectors, persistence.
 - Data: Drizzle ORM + Supabase schema guidance, RLS, migrations, seed/fixtures.
-- Styling: NativeWind setup, design tokens, responsive/theming approaches.
+- Styling: UniWind setup, tokens/theming in CSS, responsive/theming approaches (this MCP originally supported NativeWind).
 - Routing: Expo Router conventions, file-based routes, guards, deep linking.
 - Animation: Reanimated 4 guidance (worklets, transitions, thread separation).
 - Performance & SEO: startup, rerender control, list tuning, compiler hints, metadata.
 - Build scripts: local build/export scripts, sitemap generation, API build.
 - Deployment: Plesk deployment notes for static web and API, plus reverse-proxy fit.
+
+## Docs lookup tools
+This MCP includes lightweight tools for quick docs lookups during chat/code review:
+- `smart-help` auto-selects relevant guides + docs sources and searches them (recommended)
+- `list-docs` lists known docs sources by id
+- `search-docs` searches those docs by id + query (no URL copy/paste)
+- `fetch-web-doc` fetches/searches an arbitrary docs URL (fallback)
+
+## How to use tools
+These are MCP tools exposed by this server. In an MCP-enabled chat client (VS Code Copilot Chat, etc.), you typically don’t “run commands” directly — you ask the assistant to call the tool with specific inputs.
+
+Note: your MCP client chooses when to invoke tools automatically. If you want “automatic mode” every time, use `smart-help` as the single entrypoint.
+
+### Common workflows
+
+**0) Automatic mode (recommended)**
+- Ask the assistant to run `smart-help` with your question.
+- Ex: “Run smart-help with question: ‘How should we structure Expo Router layouts for auth gating?’”
+- It will:
+  - pick the relevant guide(s) in `guides/`
+  - query the most relevant live docs sources
+  - return guide excerpts + doc snippets
+
+**1) Find the right docs id**
+- Ask the assistant to run `list-docs`.
+- Pick the `docId` you want (e.g. `uniwind`, `nativewind`, `expo-router`).
+
+**2) Search those docs without pasting URLs**
+- Ask the assistant to run `search-docs` with:
+  - `docId`: one of the ids from `list-docs`
+  - `query`: a keyword/phrase to search for
+  - Optional: `maxMatchesPerUrl` (default 5) and `maxUrls` (default: all registered for that doc)
+
+**3) Fallback for an unregistered doc page**
+- Ask the assistant to run `fetch-web-doc` with:
+  - `url`: any public `https://...` docs URL
+  - Optional: `query` and `maxMatches`
+
+### Example prompts (copy/paste)
+
+- “Run `smart-help` with `question=How do I migrate cssInterop from NativeWind to Uniwind?`”
+- “Run `smart-help` with `question=What is the right Expo Router layout for auth gating?`”
+- “Run `list-docs` and show me the available `docId`s.”
+- “Run `search-docs` with `docId=uniwind` and `query=ThemeProvider`.”
+- “Run `search-docs` with `docId=nativewind` and `query=cssInterop` (maxUrls=2).”
+- “Run `fetch-web-doc` for `https://docs.uniwind.dev/migration-from-nativewind` and search for `rem` (maxMatches=5).”
+
+### Guide resources vs tools
+This server also exposes the Markdown guides in `guides/` as MCP **resources**.
+
+- Use the tool `list-guides` to see what guides are available.
+- Then open/read a guide via your client’s “readResource” flow (varies by client).
 
 ## Why it fits Plesk (and beyond)
 - Single Node process with no extra services; easy to run under Plesk’s Node support or as a proxied app.

@@ -1,365 +1,156 @@
-# Styling with NativeWind (Tailwind CSS)
+# Styling with Uniwind (Tailwind for React Native)
 
 ## Overview
-PokePages uses **NativeWind 4.x** - a utility-first styling system that brings Tailwind CSS to React Native. This provides a consistent, powerful, and developer-friendly way to style components across mobile and web.
+PokePages uses **Uniwind** - fast Tailwind `className` bindings for React Native.
 
-## Why NativeWind?
+Key mindset:
+- Prefer `className` utilities over `StyleSheet.create()` for layout/spacing/typography.
+- Keep design tokens + theming in **CSS** (Uniwind), not in `tailwind.config.js`.
+
+## Why Uniwind?
 
 ### Advantages
-✅ **Familiar syntax** - Use Tailwind classes you already know
-✅ **Cross-platform** - Same styles work on iOS, Android, and Web
-✅ **Type-safe** - TypeScript autocomplete for class names
-✅ **Performance** - Compiled at build time, not runtime
-✅ **Responsive design** - Built-in breakpoints for different screen sizes
-✅ **Dark mode support** - Easy theme switching
-✅ **No StyleSheet.create()** - Cleaner component code
-✅ **Variants** - Easy conditional styling
-✅ **Custom utilities** - Extend with app-specific classes
+- Familiar Tailwind class syntax
+- Cross-platform styling (iOS/Android/Web)
+- Build-time style computation (fast)
+- Theming via CSS (no Tailwind config required)
+- Pseudo-classes (e.g. `active:`) and responsive breakpoints
+
+### Key Differences vs NativeWind
+Uniwind’s important differences (relevant when migrating):
+- **Tailwind 4 only** (you’ll need `tailwindcss@4`)
+- Default `rem` is **16px** (NativeWind default was 14px)
+- Themes live in **CSS**, not `tailwind.config.js`
+- No NativeWind `ThemeProvider` required
+- No automatic class dedupe on web (use `tailwind-merge` if you rely on conflicts)
 
 ## Setup
 
-### Installation
+### Install
+Follow the official quickstart: https://docs.uniwind.dev/quickstart
+
+Typical packages:
 ```bash
-npm install nativewind@^4.0.0
-npm install --save-dev tailwindcss
+npm install uniwind
+npm install --save-dev tailwindcss@^4
 ```
 
-### Configuration Files
+### Metro configuration
+Uniwind is wired through Metro via `withUniwindConfig`:
+```js
+// metro.config.js
+const { getDefaultConfig } = require('@react-native/metro-config');
+const { withUniwindConfig } = require('uniwind/metro');
 
-**tailwind.config.js**
-```javascript
-/** @type {import('tailwindcss').Config} */
-module.exports = {
-  content: [
-    './src/**/*.{js,jsx,ts,tsx}',
-    './App.{js,jsx,ts,tsx}',
-  ],
-  presets: [require('nativewind/preset')],
-  theme: {
-    extend: {
-      colors: {
-        // Custom color palette
-        app: {
-          primary: '#EF5350',
-          secondary: '#42A5F5',
-          background: '#FAFAFA',
-          text: '#212121',
-          // ...
-        },
-      },
-      fontFamily: {
-        modak: ['Modak_400Regular'],
-        roboto: ['Roboto_400Regular'],
-        'roboto-medium': ['Roboto_500Medium'],
-        'roboto-bold': ['Roboto_700Bold'],
-      },
-      spacing: {
-        xs: '4px',
-        sm: '8px',
-        md: '16px',
-        lg: '24px',
-        xl: '32px',
-      },
-    },
+const config = getDefaultConfig(__dirname);
+
+module.exports = withUniwindConfig(config, {
+  cssEntryFile: './src/global.css',
+});
+```
+
+If you want to keep NativeWind’s old `rem = 14px` behavior (we probably don't and won't ever use this):
+```js
+module.exports = withUniwindConfig(config, {
+  cssEntryFile: './src/global.css',
+  polyfills: {
+    rem: 14,
   },
-  plugins: [],
-};
+});
 ```
 
-**global.css**
+### Global CSS
+Uniwind uses Tailwind 4 CSS imports:
 ```css
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* src/global.css */
+@import 'tailwindcss';
+@import 'uniwind';
 
-/* Custom utilities */
+/* Theme + tokens (example pattern) */
+@layer theme {
+  :root {
+    @variant light {
+      --color-primary: #ef5350;
+      --color-background: #fafafa;
+      --color-typography: #212121;
+    }
+
+    @variant dark {
+      --color-primary: #ef5350;
+      --color-background: #121212;
+      --color-typography: #ffffff;
+    }
+  }
+}
+
+/* Utilities / components */
 @layer utilities {
   .typography-header {
     @apply text-4xl font-bold tracking-tight;
   }
-  
-  .typography-subheader {
-    @apply text-2xl font-semibold;
-  }
-  
+
   .typography-body {
     @apply text-base leading-6;
-  }
-  
-  .typography-caption {
-    @apply text-sm text-gray-600 dark:text-gray-400;
   }
 }
 ```
 
-**Import in root layout:**
-```typescript
+Import the CSS once at your root entry (Expo Router root layout / app root):
+```ts
 import '@/global.css';
 ```
 
 ## Basic Usage
 
-### Simple Styling
-```typescript
-import { View, Text, Pressable } from 'react-native';
+### Simple styling
+```ts
+import { Pressable, Text } from 'react-native';
 
-function Button({ title, onPress }) {
+export function Button({ title, onPress }: { title: string; onPress: () => void }) {
   return (
-    <Pressable
-      className="bg-blue-500 px-6 py-3 rounded-lg active:bg-blue-600"
-      onPress={onPress}
-    >
-      <Text className="text-white font-semibold text-center">
-        {title}
-      </Text>
+    <Pressable className="bg-black px-4 py-3 rounded-lg active:opacity-80" onPress={onPress}>
+      <Text className="text-white font-semibold text-center">{title}</Text>
     </Pressable>
   );
 }
 ```
 
-### Common Patterns
+### Common patterns
 
-#### Flexbox Layouts
-```typescript
-// Vertical stack
-<View className="flex-col gap-4">
-  <Text>Item 1</Text>
-  <Text>Item 2</Text>
-</View>
+Flex layouts:
+```ts
+<View className="flex-col gap-4" />
+<View className="flex-row items-center gap-2" />
+<View className="flex-1 justify-center items-center" />
+<View className="flex-row justify-between items-center" />
+```
 
-// Horizontal row
-<View className="flex-row items-center gap-2">
-  <Icon />
-  <Text>Label</Text>
-</View>
+Spacing:
+```ts
+<View className="p-4" />
+<View className="px-4 py-2" />
+<View className="mt-4 mb-2" />
+<View className="flex-row gap-2" />
+```
 
-// Center content
-<View className="flex-1 justify-center items-center">
-  <Text>Centered</Text>
-</View>
-
-// Space between
-<View className="flex-row justify-between items-center">
-  <Text>Left</Text>
-  <Text>Right</Text>
+Dark mode:
+```ts
+<View className="bg-white dark:bg-black">
+  <Text className="text-black dark:text-white">Hello</Text>
 </View>
 ```
 
-#### Spacing
-```typescript
-// Padding
-<View className="p-4">              {/* All sides */}
-<View className="px-4 py-2">        {/* Horizontal & vertical */}
-<View className="pt-4 pb-2">        {/* Top & bottom */}
-
-// Margin
-<View className="m-4">              {/* All sides */}
-<View className="mx-auto">          {/* Center horizontally */}
-<View className="mt-4 mb-2">        {/* Top & bottom */}
-
-// Gap (for flex children)
-<View className="flex-col gap-4">   {/* Vertical gap */}
-<View className="flex-row gap-2">   {/* Horizontal gap */}
+Responsive (breakpoints):
+```ts
+<View className="w-full md:w-1/2 lg:w-1/3" />
 ```
 
-#### Colors
-```typescript
-// Background
-<View className="bg-blue-500">
-<View className="bg-app-primary">   {/* Custom color */}
+## Handling conditional / conflicting classNames
 
-// Text
-<Text className="text-white">
-<Text className="text-app-text">
-
-// Border
-<View className="border-2 border-gray-300">
-```
-
-#### Typography
-```typescript
-<Text className="text-xs">      {/* 12px */}
-<Text className="text-sm">      {/* 14px */}
-<Text className="text-base">    {/* 16px */}
-<Text className="text-lg">      {/* 18px */}
-<Text className="text-xl">      {/* 20px */}
-<Text className="text-2xl">     {/* 24px */}
-
-<Text className="font-normal">
-<Text className="font-medium">
-<Text className="font-bold">
-
-<Text className="italic">
-<Text className="uppercase">
-<Text className="capitalize">
-```
-
-## Dark Mode Support
-
-### Enable Dark Mode
-```typescript
-import { useColorScheme } from 'react-native';
-
-function ThemedView({ children, className = '' }) {
-  const colorScheme = useColorScheme();
-  
-  return (
-    <View className={`
-      bg-white dark:bg-gray-900
-      ${className}
-    `}>
-      {children}
-    </View>
-  );
-}
-```
-
-### Dark Mode Classes
-```typescript
-<View className="bg-white dark:bg-gray-900">
-<Text className="text-gray-900 dark:text-white">
-<View className="border-gray-200 dark:border-gray-700">
-```
-
-### Custom Dark Mode Hook
-```typescript
-export function useColorScheme() {
-  const [hasHydrated, setHasHydrated] = useState(false);
-  
-  useEffect(() => {
-    setHasHydrated(true);
-  }, []);
-  
-  const colorScheme = useRNColorScheme();
-  
-  // Prevent flash on web
-  if (hasHydrated) {
-    return colorScheme;
-  }
-  
-  return 'light';
-}
-```
-
-## Responsive Design
-
-### Breakpoints
-```typescript
-<View className="
-  w-full           // Mobile: full width
-  md:w-1/2         // Tablet: half width
-  lg:w-1/3         // Desktop: third width
-">
-  <Text className="
-    text-sm        // Mobile: small text
-    md:text-base   // Tablet: base text
-    lg:text-lg     // Desktop: large text
-  ">
-    Responsive text
-  </Text>
-</View>
-```
-
-### Platform-Specific Styles
-```typescript
-import { Platform } from 'react-native';
-
-<View className={`
-  p-4
-  ${Platform.OS === 'web' ? 'max-w-screen-xl mx-auto' : ''}
-`}>
-  {/* Content */}
-</View>
-```
-
-## Custom Utilities
-
-### Typography Classes
-```css
-/* global.css */
-@layer utilities {
-  .typography-header {
-    @apply text-4xl font-bold text-app-text dark:text-dark-app-text;
-    font-family: 'Modak';
-  }
-  
-  .typography-subheader {
-    @apply text-2xl font-semibold text-app-text dark:text-dark-app-text;
-  }
-  
-  .typography-body {
-    @apply text-base leading-relaxed text-app-text dark:text-dark-app-text;
-  }
-  
-  .typography-label {
-    @apply text-sm font-medium text-gray-700 dark:text-gray-300;
-  }
-  
-  .typography-caption {
-    @apply text-xs text-gray-500 dark:text-gray-400;
-  }
-}
-```
-
-Usage:
-```typescript
-<Text className="typography-header">Page Title</Text>
-<Text className="typography-body">Body content...</Text>
-```
-
-### Custom Components
-```css
-@layer components {
-  .btn-primary {
-    @apply bg-blue-500 text-white px-6 py-3 rounded-lg font-semibold;
-    @apply active:bg-blue-600;
-  }
-  
-  .btn-secondary {
-    @apply bg-gray-200 text-gray-900 px-6 py-3 rounded-lg font-semibold;
-    @apply active:bg-gray-300;
-  }
-  
-  .card {
-    @apply bg-white dark:bg-gray-800 rounded-xl p-4 shadow-lg;
-  }
-}
-```
-
-## Advanced Patterns
-
-### Conditional Classes with cn() Utility
-```typescript
-import { cn } from '~/utils/cn';
-
-function Button({ variant = 'primary', size = 'medium', className, ...props }) {
-  return (
-    <Pressable
-      className={cn(
-        // Base classes
-        'rounded-lg font-semibold text-center',
-        
-        // Variant classes
-        variant === 'primary' && 'bg-blue-500 text-white',
-        variant === 'secondary' && 'bg-gray-200 text-gray-900',
-        variant === 'danger' && 'bg-red-500 text-white',
-        
-        // Size classes
-        size === 'small' && 'px-3 py-1.5 text-sm',
-        size === 'medium' && 'px-4 py-2 text-base',
-        size === 'large' && 'px-6 py-3 text-lg',
-        
-        // Custom classes
-        className
-      )}
-      {...props}
-    />
-  );
-}
-```
-
-### cn() Implementation
-```typescript
+### Use `cn()` with `tailwind-merge`
+Unlike NativeWind, Uniwind does not automatically deduplicate conflicting classNames (especially on web).
+Use a `cn()` helper that merges classes:
+```ts
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -368,261 +159,110 @@ export function cn(...inputs: ClassValue[]) {
 }
 ```
 
-### Dynamic Styles
-```typescript
-function Card({ isActive, className }) {
-  return (
-    <View className={cn(
-      'p-4 rounded-lg border-2',
-      isActive 
-        ? 'bg-blue-50 border-blue-500' 
-        : 'bg-white border-gray-200',
-      className
-    )}>
-      {/* Content */}
-    </View>
-  );
-}
+Example:
+```ts
+<View className={cn('bg-red-500', isActive && 'bg-blue-500')} />
 ```
 
-### Animated Styles with Reanimated
-```typescript
-import Animated, { useAnimatedStyle } from 'react-native-reanimated';
+## Migration
 
-function AnimatedCard() {
-  const animatedStyle = useAnimatedStyle(() => ({
-    // Reanimated styles
-  }));
-  
-  return (
-    <Animated.View 
-      className="bg-white p-4 rounded-lg"
-      style={animatedStyle}
-    >
-      {/* Content */}
-    </Animated.View>
-  );
-}
-```
+### Migration from StyleSheet
+Aim to migrate incrementally: start with layout + spacing + typography.
 
-## Custom Theme Extension
+Before:
+```ts
+import { StyleSheet, Text, View } from 'react-native';
 
-### Extend Colors
-```javascript
-// tailwind.config.js
-theme: {
-  extend: {
-    colors: {
-      app: {
-        primary: '#EF5350',
-        secondary: '#42A5F5',
-        accent: '#FFA726',
-        background: '#FAFAFA',
-        'background-dark': '#121212',
-        text: '#212121',
-        'text-dark': '#FFFFFF',
-        error: '#F44336',
-        success: '#4CAF50',
-        warning: '#FF9800',
-      },
-      pokemon: {
-        normal: '#A8A878',
-        fire: '#F08030',
-        water: '#6890F0',
-        electric: '#F8D030',
-        grass: '#78C850',
-        // ... all types
-      },
-    },
-  },
-}
-```
-
-### Extend Spacing
-```javascript
-spacing: {
-  xs: '4px',
-  sm: '8px',
-  md: '16px',
-  lg: '24px',
-  xl: '32px',
-  '2xl': '48px',
-  '3xl': '64px',
-},
-```
-
-### Custom Shadows
-```javascript
-boxShadow: {
-  'app-small': '0 2px 4px rgba(0, 0, 0, 0.1)',
-  'app-medium': '0 4px 8px rgba(0, 0, 0, 0.12)',
-  'app-large': '0 8px 16px rgba(0, 0, 0, 0.15)',
-},
-```
-
-## Performance Tips
-
-### 1. Use className Over Style Prop
-```typescript
-// ❌ Slower - creates new object each render
-<View style={{ padding: 16, backgroundColor: 'blue' }}>
-
-// ✅ Faster - compiled at build time
-<View className="p-4 bg-blue-500">
-```
-
-### 2. Extract Repeated Classes
-```typescript
-// ❌ Repeated classes
-<View className="bg-white dark:bg-gray-900 p-4 rounded-lg">
-<View className="bg-white dark:bg-gray-900 p-4 rounded-lg">
-
-// ✅ Create utility class
-// In global.css
-.card {
-  @apply bg-white dark:bg-gray-900 p-4 rounded-lg;
-}
-
-// In component
-<View className="card">
-```
-
-### 3. Memoize Conditional Classes
-```typescript
-import { useMemo } from 'react';
-
-function Component({ variant, size }) {
-  const className = useMemo(
-    () => cn(
-      'base-classes',
-      variant === 'primary' && 'variant-classes',
-      size === 'large' && 'size-classes'
-    ),
-    [variant, size]
-  );
-  
-  return <View className={className} />;
-}
-```
-
-## Common Patterns
-
-### Card Component
-```typescript
-function Card({ children, className, ...props }) {
-  return (
-    <View 
-      className={cn(
-        'bg-white dark:bg-gray-800',
-        'rounded-xl',
-        'p-4',
-        'shadow-lg',
-        'border border-gray-200 dark:border-gray-700',
-        className
-      )}
-      {...props}
-    >
-      {children}
-    </View>
-  );
-}
-```
-
-### Button Variants
-```typescript
-const buttonVariants = {
-  base: 'px-6 py-3 rounded-lg font-semibold text-center',
-  variants: {
-    primary: 'bg-blue-500 text-white active:bg-blue-600',
-    secondary: 'bg-gray-200 text-gray-900 active:bg-gray-300',
-    outline: 'border-2 border-blue-500 text-blue-500 active:bg-blue-50',
-    ghost: 'text-blue-500 active:bg-blue-50',
-  },
-  sizes: {
-    sm: 'px-3 py-1.5 text-sm',
-    md: 'px-4 py-2 text-base',
-    lg: 'px-6 py-3 text-lg',
-  },
-};
-```
-
-### Input Component
-```typescript
-function Input({ error, className, ...props }) {
-  return (
-    <TextInput
-      className={cn(
-        'border-2 rounded-lg px-4 py-2',
-        'bg-white dark:bg-gray-800',
-        'text-gray-900 dark:text-white',
-        error 
-          ? 'border-red-500' 
-          : 'border-gray-300 dark:border-gray-600',
-        className
-      )}
-      {...props}
-    />
-  );
-}
-```
-
-## Migration from StyleSheet
-
-### Before (StyleSheet)
-```typescript
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 16,
-    backgroundColor: '#fff',
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 8,
-  },
+  container: { flex: 1, padding: 16, backgroundColor: '#fff' },
+  title: { fontSize: 24, fontWeight: '700', marginBottom: 8 },
 });
 
-<View style={styles.container}>
-  <Text style={styles.title}>Title</Text>
-</View>
+export function Screen() {
+  return (
+    <View style={styles.container}>
+      <Text style={styles.title}>Title</Text>
+    </View>
+  );
+}
 ```
 
-### After (NativeWind)
-```typescript
-<View className="flex-1 p-4 bg-white">
-  <Text className="text-2xl font-bold mb-2">Title</Text>
-</View>
+After:
+```ts
+import { Text, View } from 'react-native';
+
+export function Screen() {
+  return (
+    <View className="flex-1 p-4 bg-white">
+      <Text className="text-2xl font-bold mb-2">Title</Text>
+    </View>
+  );
+}
 ```
 
-## Debugging
+Notes:
+- Prefer `gap-*` over `marginBottom` stacks where possible.
+- If you have dynamic numeric styles, keep `style={{ ... }}` locally for that single value.
 
-### See Generated Classes
-In development, NativeWind logs generated styles:
-```typescript
-// Enable debug mode
-<View className="bg-blue-500" data-tw-debug />
-```
+### Migration from NativeWind
+Use the official guide as the source of truth: https://docs.uniwind.dev/migration-from-nativewind
 
-### VS Code Extension
-Install **Tailwind CSS IntelliSense** for:
-- Autocomplete
-- Hover previews
-- Linting
-- Class name suggestions
+Practical checklist:
+1. Upgrade to `tailwindcss@4` (Uniwind requires Tailwind 4).
+2. Remove the NativeWind Babel preset (`nativewind/babel`) from `babel.config.js`.
+3. Replace NativeWind’s Metro config with Uniwind’s `withUniwindConfig`.
+4. Update your `global.css` header to:
+   ```css
+   @import 'tailwindcss';
+   @import 'uniwind';
+   ```
+5. Delete `nativewind.d.ts` (no longer needed).
+6. Move theme/token configuration from `tailwind.config.js` into CSS (`@layer theme` + `@variant`).
+7. Remove `tailwind.config.js` if it only existed for NativeWind theming.
+8. If you had font families in `tailwind.config.js`, move them into CSS (Uniwind docs note RN doesn’t support font fallbacks).
+9. Optional: set `polyfills.rem = 14` in Metro if you need old sizing behavior.
+10. Remove NativeWind’s `ThemeProvider` (keep React Navigation’s theme provider if you use it).
+11. If you used NativeWind’s `cssInterop`, migrate to Uniwind’s `withUniwind` API.
+12. Safe area utilities:
+    - If using open-source Uniwind, forward insets via `react-native-safe-area-context`:
+      ```ts
+      import { SafeAreaListener } from 'react-native-safe-area-context';
+      import { Uniwind } from 'uniwind';
 
-## Best Practices
+      export function App() {
+        return (
+          <SafeAreaListener onChange={({ insets }) => Uniwind.updateInsets(insets)}>
+            <View className="p-safe">{/* content */}</View>
+          </SafeAreaListener>
+        );
+      }
+      ```
+13. If you relied on conflicting class ordering, adopt `tailwind-merge` (`cn()` above).
 
-1. ✅ **Use semantic class names** - `bg-app-primary` instead of `bg-blue-500`
-2. ✅ **Group related classes** - `bg-white p-4 rounded-lg shadow-lg`
-3. ✅ **Use cn() for conditional classes** - Cleaner than string templates
-4. ✅ **Extract repeated patterns** - Create custom utilities
-5. ✅ **Follow Tailwind order** - Layout → spacing → colors → typography
-6. ✅ **Use dark mode consistently** - Always provide dark variant
-7. ✅ **Mobile-first responsive** - Start with mobile, add `md:` `lg:` breakpoints
-8. ❌ **Avoid arbitrary values** - `w-[123px]` (use theme values instead)
+## Debugging & Tooling
+
+### Editor support
+Install **Tailwind CSS IntelliSense** in VS Code for autocomplete and hover previews.
+
+### Docs lookup (Uniwind + NativeWind)
+- Uniwind docs: https://docs.uniwind.dev/
+- Uniwind migration from NativeWind: https://docs.uniwind.dev/migration-from-nativewind
+- NativeWind docs: https://www.nativewind.dev/
+
+This repo’s MCP server includes tools so you don’t have to paste URLs:
+- `list-docs` — shows known docs ids (e.g. `uniwind`, `nativewind`)
+- `search-docs` — searches docs by `docId` + `query`
+
+Example lookups:
+- `search-docs` with `docId=uniwind` and `query=ThemeProvider`
+- `search-docs` with `docId=nativewind` and `query=cssInterop`
+
+If you need an ad-hoc URL that isn’t in the registry yet, you can still use:
+- `fetch-web-doc` with `url=...` and `query=...`
 
 ## Resources
-- [NativeWind Documentation](https://www.nativewind.dev/)
-- [Tailwind CSS Documentation](https://tailwindcss.com/docs)
-- [Tailwind CSS Cheat Sheet](https://nerdcave.com/tailwind-cheat-sheet)
+- Uniwind: https://docs.uniwind.dev/
+- Class names: https://docs.uniwind.dev/class-names
+- Theming basics: https://docs.uniwind.dev/theming/basics
+- FAQ (including `tailwind-merge` guidance): https://docs.uniwind.dev/faq
+- Tailwind CSS (v4): https://tailwindcss.com/docs
