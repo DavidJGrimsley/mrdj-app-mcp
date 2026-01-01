@@ -12,6 +12,62 @@ import cors from "cors";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const guidesDir = path.join(__dirname, "..", "guides");
+const PORTFOLIO_SERVER_ID = "mrdj-app-mcp";
+const PORTFOLIO_MCP_ENDPOINT_URL = "https://davidjgrimsley.com/mcp/mrdj-app-mcp/mcp";
+const PORTFOLIO_GITHUB_REPO_URL = "https://github.com/DavidJGrimsley/mrdj-app-mcp";
+// Keep these arrays in the exact order expected by the portfolio UI.
+const PORTFOLIO_RESOURCES = [
+    { id: "architecture", title: "Architecture", fileName: "architecture.md", description: "Stack, structure, and conventions for PokePages." },
+    { id: "state-management", title: "State Management", fileName: "stateManagement.md", description: "Zustand patterns, selectors, persistence, and performance tips." },
+    { id: "database-architecture", title: "Database Architecture", fileName: "databaseArchitecture.md", description: "Drizzle + Supabase schema patterns, RLS, and migration practices." },
+    { id: "routing", title: "Routing", fileName: "routing.md", description: "Expo Router layouts, guards, deep linking, and SEO head usage." },
+    { id: "styling", title: "Styling", fileName: "styling.md", description: "NativeWind setup, class patterns, dark mode, and responsive rules." },
+    { id: "performance", title: "Performance", fileName: "performance.md", description: "React Native perf checklist: startup, rerenders, lists, and animation." },
+    { id: "animation", title: "Animation", fileName: "animation.md", description: "Reanimated setup, shared values, gestures, layout animations, and patterns." },
+    { id: "meta-tags", title: "Meta Tags", fileName: "metaTags.md", description: "SEO/meta templates for Expo Router (OG/Twitter/structured data)." },
+    { id: "offline-first", title: "Offline First", fileName: "offlineFirst.md", description: "Conflict resolution, sync strategy, storage, and NetInfo guidance." },
+    { id: "plesk-deployment", title: "Plesk Deployment", fileName: "pleskDeployment.md", description: "Plesk web/API deployment steps, env management, and rollback notes." },
+    { id: "build-scripts", title: "Build Scripts", fileName: "buildScripts.md", description: "Sitemap generator and API build workflows." }
+];
+const PORTFOLIO_TOOLS = [
+    {
+        name: "list-guides",
+        title: "List Copilot Guides",
+        description: "Return the available copilot guides as resource links",
+        schema: {}
+    }
+];
+const PORTFOLIO_PROMPTS = [
+    {
+        name: "architecture-help",
+        title: "Architecture and DB helper",
+        description: "Answer architecture or database design questions using the architecture and database guides",
+        args: ["question"]
+    },
+    {
+        name: "state-store-template",
+        title: "Zustand store helper",
+        description: "Generate a Zustand store plan using the state management guide",
+        args: ["storeName", "concern", "persistence"]
+    },
+    {
+        name: "routing-checklist",
+        title: "Routing checklist",
+        description: "Provide an Expo Router checklist for a screen or flow",
+        args: ["route"]
+    }
+];
+let cachedPackageVersion = null;
+async function getPackageVersion() {
+    if (cachedPackageVersion)
+        return cachedPackageVersion;
+    const packageJsonPath = path.join(__dirname, "..", "package.json");
+    const raw = await readFile(packageJsonPath, "utf8");
+    const parsed = JSON.parse(raw);
+    const version = typeof parsed.version === "string" ? parsed.version : "0.0.0";
+    cachedPackageVersion = version;
+    return version;
+}
 const guides = [
     { id: "architecture", title: "Architecture", fileName: "architecture.md", description: "Stack, structure, and conventions for PokePages." },
     { id: "state-management", title: "State Management", fileName: "stateManagement.md", description: "Zustand patterns, selectors, persistence, and performance tips." },
@@ -823,6 +879,28 @@ async function main() {
         // Health check endpoint
         app.get("/health", (_req, res) => {
             res.json({ status: "ok", service: "mrdj-app-mcp", version: "0.1.0" });
+        });
+        // Portfolio metadata endpoint (public REST; not MCP; not SSE)
+        app.get("/portfolio.json", async (_req, res) => {
+            try {
+                const version = await getPackageVersion();
+                res.json({
+                    server: {
+                        id: PORTFOLIO_SERVER_ID,
+                        name: PORTFOLIO_SERVER_ID,
+                        version,
+                        mcpEndpointUrl: PORTFOLIO_MCP_ENDPOINT_URL,
+                        githubRepoUrl: PORTFOLIO_GITHUB_REPO_URL
+                    },
+                    resources: PORTFOLIO_RESOURCES,
+                    tools: PORTFOLIO_TOOLS,
+                    prompts: PORTFOLIO_PROMPTS
+                });
+            }
+            catch (error) {
+                console.error("Error building /portfolio.json response", error);
+                res.status(500).json({ error: "Internal server error" });
+            }
         });
         // Store heartbeat intervals for cleanup
         const sseHeartbeats = {};
