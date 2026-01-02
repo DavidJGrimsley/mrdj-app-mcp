@@ -102,6 +102,47 @@ const PORTFOLIO_PROMPTS = [
         args: ["route"]
     }
 ];
+const PORTFOLIO_ENDPOINTS = [
+    {
+        id: "mcp-endpoint",
+        title: "MCP Endpoint",
+        method: "GET",
+        url: "https://davidjgrimsley.com/mcp/mrdj-app-mcp/mcp",
+        description: "Primary MCP server endpoint (SSE transport).",
+        transport: "sse",
+        contentType: "text/event-stream"
+    },
+    {
+        id: "portfolio-json",
+        title: "Portfolio Metadata (portfolio.json)",
+        method: "GET",
+        url: "https://davidjgrimsley.com/mcp/mrdj-app-mcp/portfolio.json",
+        description: "Metadata used by the portfolio UI (resources/tools/prompts).",
+        contentType: "application/json"
+    },
+    {
+        id: "health",
+        title: "Health Check",
+        method: "GET",
+        url: "https://davidjgrimsley.com/mcp/mrdj-app-mcp/health",
+        description: "Server health status endpoint.",
+        contentType: "application/json"
+    },
+    {
+        id: "info-page",
+        title: "Info Page",
+        method: "GET",
+        url: "https://davidjgrimsley.com/mcp/mrdj-app-mcp",
+        description: "Human-readable MCP server overview page."
+    },
+    {
+        id: "github-repo",
+        title: "GitHub Repository",
+        method: "GET",
+        url: "https://github.com/DavidJGrimsley/mrdj-app-mcp",
+        description: "Source code for the MCP server."
+    }
+];
 let cachedPackageVersion = null;
 async function getPackageVersion() {
     if (cachedPackageVersion)
@@ -947,7 +988,8 @@ async function main() {
                     },
                     resources: PORTFOLIO_RESOURCES,
                     tools: PORTFOLIO_TOOLS,
-                    prompts: PORTFOLIO_PROMPTS
+                    prompts: PORTFOLIO_PROMPTS,
+                    endpoints: PORTFOLIO_ENDPOINTS
                 };
                 // Compute ETag for conditional requests
                 const payloadStr = JSON.stringify(payload);
