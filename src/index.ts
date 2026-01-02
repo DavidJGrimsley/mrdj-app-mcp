@@ -4,7 +4,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { z } from "zod";
 import { readFile } from "node:fs/promises";
-import { randomUUID } from "node:crypto";
+import { randomUUID, createHash } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import express from "express";
@@ -64,7 +64,8 @@ const PORTFOLIO_RESOURCES: PortfolioResource[] = [
   { id: "meta-tags", title: "Meta Tags", fileName: "metaTags.md", description: "SEO/meta templates for Expo Router (OG/Twitter/structured data)." },
   { id: "offline-first", title: "Offline First", fileName: "offlineFirst.md", description: "Conflict resolution, sync strategy, storage, and NetInfo guidance." },
   { id: "plesk-deployment", title: "Plesk Deployment", fileName: "pleskDeployment.md", description: "Plesk web/API deployment steps, env management, and rollback notes." },
-  { id: "build-scripts", title: "Build Scripts", fileName: "buildScripts.md", description: "Sitemap generator and API build workflows." }
+  { id: "build-scripts", title: "Build Scripts", fileName: "buildScripts.md", description: "Sitemap generator and API build workflows." },
+  { id: "backend-best-practices", title: "Backend Best Practices", fileName: "backendBestPractices.md", description: "Node.js/Express best practices: CORS, caching, security, error handling, logging, and API design." }
 ];
 
 const PORTFOLIO_TOOLS: PortfolioTool[] = [
@@ -73,6 +74,50 @@ const PORTFOLIO_TOOLS: PortfolioTool[] = [
     title: "List Copilot Guides",
     description: "Return the available copilot guides as resource links",
     schema: {}
+  },
+  {
+    name: "list-docs",
+    title: "List Package Docs",
+    description: "List known docs sources by id (used by search-docs)",
+    schema: {}
+  },
+  {
+    name: "search-docs",
+    title: "Search Package Docs",
+    description: "Search known docs sources by id without providing URLs",
+    schema: {
+      docId: "string",
+      query: "string",
+      maxMatchesPerUrl: "number (optional)",
+      maxUrls: "number (optional)"
+    }
+  },
+  {
+    name: "fetch-web-doc",
+    title: "Fetch / Search Web Docs",
+    description: "Fetch a public documentation URL and optionally search it for a query",
+    schema: {
+      url: "string (URL)",
+      query: "string (optional)",
+      maxMatches: "number (optional)"
+    }
+  },
+  {
+    name: "smart-help",
+    title: "Smart Help (Guides + Live Docs)",
+    description: "Auto-select relevant PokePages guides and query live docs sources",
+    schema: {
+      question: "string",
+      preferGuides: "boolean (optional)",
+      preferDocs: "boolean (optional)",
+      guideIds: "string[] (optional)",
+      docIds: "string[] (optional)",
+      docQuery: "string (optional)",
+      maxDocIds: "number (optional)",
+      maxUrlsPerDoc: "number (optional)",
+      maxMatchesPerUrl: "number (optional)",
+      guideExcerptChars: "number (optional)"
+    }
   }
 ];
 
@@ -1024,14 +1069,23 @@ async function main() {
     
     // Health check endpoint
     app.get("/health", (_req, res) => {
+      res.set("Cache-Control", "no-store");
       res.json({ status: "ok", service: "mrdj-app-mcp", version: "0.1.0" });
     });
 
     // Portfolio metadata endpoint (public REST; not MCP; not SSE)
-    app.get("/portfolio.json", async (_req, res) => {
+    // Supports CORS preflight (OPTIONS) and conditional requests (If-None-Match)
+    app.options("/portfolio.json", (_req, res) => {
+      res.set("Access-Control-Allow-Origin", "*");
+      res.set("Access-Control-Allow-Methods", "GET, OPTIONS");
+      res.set("Access-Control-Allow-Headers", "Content-Type");
+      res.status(204).end();
+    });
+
+    app.get("/portfolio.json", async (req, res) => {
       try {
         const version = await getPackageVersion();
-        res.json({
+        const payload = {
           server: {
             id: PORTFOLIO_SERVER_ID,
             name: PORTFOLIO_SERVER_ID,
@@ -1042,10 +1096,28 @@ async function main() {
           resources: PORTFOLIO_RESOURCES,
           tools: PORTFOLIO_TOOLS,
           prompts: PORTFOLIO_PROMPTS
-        });
+        };
+
+        // Compute ETag for conditional requests
+        const payloadStr = JSON.stringify(payload);
+        const hash = createHash("sha1").update(payloadStr, "utf8").digest("hex");
+        const etag = `"${hash.slice(0, 16)}"`;
+
+        // Set caching headers
+        res.set("Cache-Control", "public, max-age=300");
+        res.set("ETag", etag);
+
+        // Check If-None-Match for conditional request (304)
+        const clientEtag = req.headers["if-none-match"];
+        if (clientEtag === etag) {
+          return res.status(304).end();
+        }
+
+        // Return 200 with JSON payload
+        res.json(payload);
       } catch (error) {
-        console.error("Error building /portfolio.json response", error);
-        res.status(500).json({ error: "Internal server error" });
+        console.error("Error building /portfolio.json response:", error);
+        res.status(500).json({ error: "portfolio_meta_failed" });
       }
     });
 
