@@ -9,6 +9,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import express from "express";
 import cors from "cors";
+import { ConvertStylingInputSchema, runConvertStylingTool } from "./convertStyling.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const guidesDir = path.join(__dirname, "..", "guides");
@@ -79,6 +80,21 @@ const PORTFOLIO_TOOLS = [
             maxUrlsPerDoc: "number (optional)",
             maxMatchesPerUrl: "number (optional)",
             guideExcerptChars: "number (optional)"
+        }
+    },
+    {
+        name: "convert-styling",
+        title: "Convert Styling (Uniwind)",
+        description: "Scan a project for styling usage and (optionally) apply best-effort Uniwind migration steps (dry-run by default).",
+        schema: {
+            projectRoot: "string (optional absolute path)",
+            files: "{ path: string, content: string }[] (optional; in-memory mode)",
+            basePath: "string (optional; label used for reporting in in-memory mode)",
+            apply: "boolean (optional; default false)",
+            maxFiles: "number (optional)",
+            includeExtensions: "string[] (optional)",
+            excludeDirNames: "string[] (optional)",
+            mode: "'uniwind-migration' (optional)"
         }
     }
 ];
@@ -836,6 +852,20 @@ server.registerTool("smart-help", {
         ]
     };
 });
+server.registerTool("convert-styling", {
+    title: "Convert Styling (Uniwind)",
+    description: "Scan a project for styling usage and (optionally) apply best-effort Uniwind migration steps using the local styling guide as reference.",
+    inputSchema: ConvertStylingInputSchema
+}, async (input) => {
+    const stylingGuideFile = guideMap.get("styling")?.fileName ?? "styling.md";
+    const stylingGuidePath = path.join(guidesDir, stylingGuideFile);
+    const guideText = await readFile(stylingGuidePath, "utf8");
+    return runConvertStylingTool({
+        input,
+        projectRootFallback: process.env.MCP_PROJECT_ROOT ?? process.cwd(),
+        guideText
+    });
+});
 server.registerPrompt("architecture-help", {
     title: "Architecture and DB helper",
     description: "Answer architecture or database design questions using the architecture and database guides",
@@ -925,6 +955,13 @@ async function main() {
     const args = process.argv.slice(2);
     const httpPortIndex = args.indexOf("--http-port");
     const useHttp = httpPortIndex !== -1 && args[httpPortIndex + 1];
+    // Optional: default project root for scanning tools
+    const projectRootIndex = args.indexOf("--project-root");
+    const projectRootValue = projectRootIndex !== -1 ? args[projectRootIndex + 1] : undefined;
+    if (projectRootValue) {
+        process.env.MCP_PROJECT_ROOT = path.resolve(projectRootValue);
+        console.error(`MCP project root set to: ${process.env.MCP_PROJECT_ROOT}`);
+    }
     if (useHttp) {
         const port = parseInt(args[httpPortIndex + 1], 10);
         if (isNaN(port)) {

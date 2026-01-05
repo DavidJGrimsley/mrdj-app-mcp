@@ -28,6 +28,35 @@ This MCP includes lightweight tools for quick docs lookups during chat/code revi
 - `search-docs` searches those docs by id + query (no URL copy/paste)
 - `fetch-web-doc` fetches/searches an arbitrary docs URL (fallback)
 
+## Project audit / conversion tools
+
+### `convert-styling` (Uniwind)
+Scans a target project for styling usage and checks it against the local Uniwind styling guide (`guides/styling.md`).
+
+It can also apply a small set of **safe, mechanical** migration steps (dry-run by default):
+- Removes `nativewind/babel` from `babel.config.*` (best-effort)
+- Best-effort updates `metro.config.*` from NativeWind → Uniwind naming
+- Normalizes `global.css` to Tailwind 4 + Uniwind imports (`@import 'tailwindcss';` and `@import 'uniwind';`)
+- Deletes `nativewind.d.ts` (when `apply=true`)
+
+It will also *report* (but not auto-convert) items that usually require manual edits:
+- `StyleSheet.create()` usage
+- Runtime NativeWind APIs (`ThemeProvider`, `cssInterop`, `styled`, etc.)
+- Non-trivial Tailwind/NativeWind config migration
+
+#### In-memory mode ("Add file to chat")
+Some MCP clients (including VS Code) can attach files into chat context, but the MCP server process may not have filesystem access to your repo (especially when using a remote HTTP/SSE server).
+
+To support that workflow, `convert-styling` also accepts an in-memory `files` array:
+- `files`: `[{ path, content }]` (path is just a label; workspace-relative is ideal)
+- `basePath`: optional label (e.g. repo name)
+
+When `files` is provided:
+- `projectRoot` is ignored
+- `apply=true` returns an edit bundle (it does not write to disk)
+
+This is best for converting a handful of files you’ve attached to chat. It is not practical for whole-repo migrations due to message size limits.
+
 ## How to use tools
 These are MCP tools exposed by this server. In an MCP-enabled chat client (VS Code Copilot Chat, etc.), you typically don’t “run commands” directly — you ask the assistant to call the tool with specific inputs.
 
@@ -66,6 +95,17 @@ Note: your MCP client chooses when to invoke tools automatically. If you want �
 - “Run `search-docs` with `docId=uniwind` and `query=ThemeProvider`.”
 - “Run `search-docs` with `docId=nativewind` and `query=cssInterop` (maxUrls=2).”
 - “Run `fetch-web-doc` for `https://docs.uniwind.dev/migration-from-nativewind` and search for `rem` (maxMatches=5).”
+- “Run `convert-styling` (dry-run) with `projectRoot=/absolute/path/to/my-app`.”
+- “Run `convert-styling` with `projectRoot=/absolute/path/to/my-app` and `apply=true`.”
+
+### Choosing what project gets scanned
+`convert-styling` defaults to scanning:
+- `MCP_PROJECT_ROOT` if set, else
+- the server process working directory
+
+To set a default root when starting the server:
+- `node build/index.js --project-root /absolute/path/to/my-app`
+- `pm2 start build/index.js --name mrdj-app-mcp -- --http-port 4000 --project-root /absolute/path/to/my-app`
 
 ### Guide resources vs tools
 This server also exposes the Markdown guides in `guides/` as MCP **resources**.
@@ -219,6 +259,7 @@ The server provides open access (no authentication) so anyone can use the guides
 
 ## Project layout
 - `src/index.ts` — MCP server implementation
+- `src/convertStyling.ts` — best-effort styling audit + Uniwind migration tool
 - `build/index.js` — compiled output
 - `guides/` — domain guides exposed as MCP resources
 
