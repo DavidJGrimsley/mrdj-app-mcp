@@ -113,11 +113,20 @@ const PORTFOLIO_ENDPOINTS = [
         contentType: "text/event-stream"
     },
     {
+        id: "sse-messages",
+        title: "SSE Messages (POST)",
+        method: "POST",
+        url: "https://davidjgrimsley.com/mcp/mrdj-app-mcp/messages",
+        description: "SSE transport message endpoint (used by legacy SSE MCP clients).",
+        transport: "sse",
+        contentType: "application/json"
+    },
+    {
         id: "portfolio-json",
         title: "Portfolio Metadata (portfolio.json)",
         method: "GET",
         url: "https://davidjgrimsley.com/mcp/mrdj-app-mcp/portfolio.json",
-        description: "Metadata used by the portfolio UI (resources/tools/prompts).",
+        description: "The metadata that powers this page. Pretty meta huh?",
         contentType: "application/json"
     },
     {
@@ -127,20 +136,6 @@ const PORTFOLIO_ENDPOINTS = [
         url: "https://davidjgrimsley.com/mcp/mrdj-app-mcp/health",
         description: "Server health status endpoint.",
         contentType: "application/json"
-    },
-    {
-        id: "info-page",
-        title: "Info Page",
-        method: "GET",
-        url: "https://davidjgrimsley.com/mcp/mrdj-app-mcp",
-        description: "Human-readable MCP server overview page."
-    },
-    {
-        id: "github-repo",
-        title: "GitHub Repository",
-        method: "GET",
-        url: "https://github.com/DavidJGrimsley/mrdj-app-mcp",
-        description: "Source code for the MCP server."
     }
 ];
 let cachedPackageVersion = null;
