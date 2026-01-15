@@ -9,6 +9,7 @@ This index replaces the old general guide. Each topic now lives in its own focus
 - [routing.md](routing.md) — Expo Router conventions, file-based routes, guards, linking.
 - [animation.md](animation.md) — Reanimated/worklets guidance, transitions, thread separation.
 - [performance.md](performance.md) — Startup, re-render control, lists, compiler, worklets, measurement.
+- [pwa.md](pwa.md) — Progressive Web App setup, manifest, service worker, auto-updates, theme-color.
 - [buildScripts.md](buildScripts.md) — Local build/export scripts, sitemap generation, API server build.
 - [pleskDeployment.md](pleskDeployment.md) — How we deploy static web builds and the API on Plesk.
 
