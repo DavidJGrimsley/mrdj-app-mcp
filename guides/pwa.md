@@ -104,23 +104,26 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  // Don't intercept API requests
   const url = new URL(event.request.url);
-  // Example: Skip caching for API port (customize for your setup)
+  
+  // Example: Skip caching for API requests (customize port for your setup)
+  // Early return allows browser to handle request normally (no event.respondWith)
   if (url.port === '3001' || (url.hostname === 'localhost' && url.port !== location.port)) {
-    // Let API requests pass through without caching
     return;
   }
   
+  // Only handle GET requests
   if (event.request.method !== 'GET') return;
   
+  // Cache-first strategy for all other requests
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       if (cachedResponse) return cachedResponse;
       return caches.open(CACHE_NAME).then((cache) =>
         fetch(event.request).then((response) => {
-          // Optionally cache dynamic requests
-          if (response && response.status === 200 && event.request.url.startsWith(self.location.origin)) {
+          // Cache successful same-origin responses
+          const isSameOrigin = event.request.url.startsWith(self.location.origin);
+          if (response && response.status === 200 && isSameOrigin) {
             cache.put(event.request, response.clone());
           }
           return response;
