@@ -1,5 +1,5 @@
 # mrdj-app-mcp
-This is running on my VPS and can be used in any client like VS Code at [davidjgrimsley.com/mcp/mrdj-app-mcp/mcp](https://davidjgrimsley.com/mcp/mrdj-app-mcp/mcp). There is a more in-depth info page at [davidjgrimsley.com/mcp/mrdj-app-mcp](https://davidjgrimsley.com/mcp/mrdj-app-mcp).
+This is running on my VPS and can be used in any client like VS Code at [davidjgrimsley.com/public-facing/mcp/mrdj-app-mcp/mcp](https://davidjgrimsley.com/public-facing/mcp/mrdj-app-mcp/mcp). There is a more in-depth info page at [davidjgrimsley.com/mcp/mrdj-app-mcp](https://davidjgrimsley.com/mcp/mrdj-app-mcp).
 
 Model Context Protocol (MCP) server that surfaces my Expo/React Native web and mobile guidance (PokePages) as structured resources. Built to run locally or behind a reverse proxy (e.g., Plesk) so AI tools can query the same docs I use.
 
@@ -166,7 +166,7 @@ Add to your NGINX site config (typically `/etc/nginx/sites-available/yourdomain.
 
 ```nginx
 # MCP endpoint (Streamable HTTP + SSE)
-location /mcp/mrdj-app-mcp/mcp {
+location /public-facing/mcp/mrdj-app-mcp/mcp {
     proxy_pass http://localhost:4000/mcp;
     proxy_http_version 1.1;
     proxy_set_header Upgrade $http_upgrade;
@@ -189,7 +189,7 @@ location /mcp/mrdj-app-mcp/mcp {
 }
 
 # SSE message POST endpoint (required for legacy SSE transport)
-location /mcp/mrdj-app-mcp/messages {
+location /public-facing/mcp/mrdj-app-mcp/messages {
     proxy_pass http://localhost:4000/mcp/messages;
     proxy_http_version 1.1;
     proxy_set_header Host $host;
@@ -204,7 +204,7 @@ location /mcp/mrdj-app-mcp/messages {
 }
 
 # Health check endpoint
-location /mcp/mrdj-app-mcp/health {
+location /public-facing/mcp/mrdj-app-mcp/health {
     proxy_pass http://localhost:4000/health;
     proxy_http_version 1.1;
     proxy_set_header Host $host;
@@ -222,7 +222,7 @@ sudo systemctl reload nginx
 **5. Verify deployment**
 ```bash
 # Health check
-curl https://yourdomain.com/mcp/mrdj-app-mcp/health
+curl https://yourdomain.com/public-facing/mcp/mrdj-app-mcp/health
 
 # Should return: {"status":"ok","service":"mrdj-app-mcp","version":"0.1.0"}
 ```
@@ -240,7 +240,7 @@ curl https://yourdomain.com/mcp/mrdj-app-mcp/health
 
 Configure your MCP client to connect to:
 ```
-https://yourdomain.com/mcp/mrdj-app-mcp/mcp
+https://yourdomain.com/public-facing/mcp/mrdj-app-mcp/mcp
 ```
 
 **VS Code example** (in `.vscode/mcp.json` or user settings):
@@ -249,7 +249,7 @@ https://yourdomain.com/mcp/mrdj-app-mcp/mcp
   "servers": {
     "mrdj-app-mcp": {
       "type": "sse",
-      "url": "https://yourdomain.com/mcp/mrdj-app-mcp/mcp"
+      "url": "https://yourdomain.com/public-facing/mcp/mrdj-app-mcp/mcp"
     }
   }
 }

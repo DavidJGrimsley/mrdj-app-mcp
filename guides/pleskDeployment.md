@@ -48,7 +48,7 @@ Add this in **Plesk → Domains → [Your Domain] → Apache & nginx Settings �
 # Only proxy specific API endpoints and docs to the Flask/Python app
 
 # Proxy API endpoints to the Flask app running locally
-location ~ ^/api/quantum/(quantum_text|quantum_gate|quantum_echo_types|health)$ {
+location ~ ^/public-facing/api/quantum/(quantum_text|quantum_gate|quantum_echo_types|health)$ {
 	proxy_pass http://127.0.0.1:8000;
 	proxy_set_header Host $host;
 	proxy_set_header X-Real-IP $remote_addr;
@@ -59,8 +59,8 @@ location ~ ^/api/quantum/(quantum_text|quantum_gate|quantum_echo_types|health)$ 
 }
 
 # Proxy Swagger UI to Flask app (exact match for priority)
-location = /api/quantum/docs {
-	proxy_pass http://127.0.0.1:8000/api/quantum/docs;
+location = /public-facing/api/quantum/docs {
+	proxy_pass http://127.0.0.1:8000;
 	proxy_set_header Host $host;
 	proxy_set_header X-Real-IP $remote_addr;
 	proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -68,8 +68,8 @@ location = /api/quantum/docs {
 }
 
 # Proxy OpenAPI spec to Flask app (exact match for priority)
-location = /api/quantum/openapi.yaml {
-	proxy_pass http://127.0.0.1:8000/api/quantum/openapi.yaml;
+location = /public-facing/api/quantum/openapi.yaml {
+	proxy_pass http://127.0.0.1:8000;
 	proxy_set_header Host $host;
 	add_header Content-Type application/x-yaml;
 }
@@ -80,7 +80,7 @@ location = /api/quantum/openapi.yaml {
 - Use exact match `location =` for specific resources (docs, openapi.yaml) to ensure priority
 - Let the Python app handle CORS headers; don't duplicate in NGINX
 - Replace `8000` with your actual local port
-- Replace `/api/quantum/` pattern with your API namespace
+- Replace `/public-facing/api/quantum/` pattern with your API namespace
 
 ## Operational Notes
 - Static vs API separation: static site lives in `/httpdocs`; API runtime lives in `/server` (subdomain). Avoid mixing.

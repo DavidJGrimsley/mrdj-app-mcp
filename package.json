@@ -16,7 +16,8 @@
     "start:http": "node ./build/index.js --http-port 4000",
     "dev": "ts-node ./src/index.ts",
     "dev:http": "ts-node ./src/index.ts --http-port 4000",
-    "test": "echo \"No tests yet\" && exit 0"
+    "test": "echo \"No tests yet\" && exit 0",
+    "copy:pwa-icons": "node ./scripts/copy-pwa-icons.mjs"
   },
   "keywords": [
     "mcp",

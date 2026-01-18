@@ -3,7 +3,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { z } from "zod";
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { randomUUID, createHash } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -60,24 +60,15 @@ type PortfolioEndpoint = {
 };
 
 const PORTFOLIO_SERVER_ID = "mrdj-app-mcp";
-const PORTFOLIO_MCP_ENDPOINT_URL = "https://davidjgrimsley.com/mcp/mrdj-app-mcp/mcp";
+const PUBLIC_MCP_BASE_URL = "https://davidjgrimsley.com/public-facing/mcp";
+const PUBLIC_MCP_SERVER_BASE_URL = `${PUBLIC_MCP_BASE_URL}/${PORTFOLIO_SERVER_ID}`;
+const PUBLIC_MCP_SERVER_PATH = `/public-facing/mcp/${PORTFOLIO_SERVER_ID}`;
+const PORTFOLIO_MCP_ENDPOINT_URL = `${PUBLIC_MCP_SERVER_BASE_URL}/mcp`;
+const PORTFOLIO_SSE_MESSAGES_URL = `${PUBLIC_MCP_SERVER_BASE_URL}/messages`;
+const PORTFOLIO_HEALTH_URL = `${PUBLIC_MCP_SERVER_BASE_URL}/health`;
+const PORTFOLIO_PORTFOLIO_URL = `${PUBLIC_MCP_SERVER_BASE_URL}/portfolio.json`;
 const PORTFOLIO_GITHUB_REPO_URL = "https://github.com/DavidJGrimsley/mrdj-app-mcp";
-
-// Keep these arrays in the exact order expected by the portfolio UI.
-const PORTFOLIO_RESOURCES: PortfolioResource[] = [
-  { id: "architecture", title: "Architecture", fileName: "architecture.md", description: "Stack, structure, and conventions for PokePages." },
-  { id: "state-management", title: "State Management", fileName: "stateManagement.md", description: "Zustand patterns, selectors, persistence, and performance tips." },
-  { id: "database-architecture", title: "Database Architecture", fileName: "databaseArchitecture.md", description: "Drizzle + Supabase schema patterns, RLS, and migration practices." },
-  { id: "routing", title: "Routing", fileName: "routing.md", description: "Expo Router layouts, guards, deep linking, and SEO head usage." },
-  { id: "styling", title: "Styling", fileName: "styling.md", description: "NativeWind setup, class patterns, dark mode, and responsive rules." },
-  { id: "performance", title: "Performance", fileName: "performance.md", description: "React Native perf checklist: startup, rerenders, lists, and animation." },
-  { id: "animation", title: "Animation", fileName: "animation.md", description: "Reanimated setup, shared values, gestures, layout animations, and patterns." },
-  { id: "meta-tags", title: "Meta Tags", fileName: "metaTags.md", description: "SEO/meta templates for Expo Router (OG/Twitter/structured data)." },
-  { id: "offline-first", title: "Offline First", fileName: "offlineFirst.md", description: "Conflict resolution, sync strategy, storage, and NetInfo guidance." },
-  { id: "plesk-deployment", title: "Plesk Deployment", fileName: "pleskDeployment.md", description: "Plesk web/API deployment steps, env management, and rollback notes." },
-  { id: "build-scripts", title: "Build Scripts", fileName: "buildScripts.md", description: "Sitemap generator and API build workflows." },
-  { id: "backend-best-practices", title: "Backend Best Practices", fileName: "backendBestPractices.md", description: "Node.js/Express best practices: CORS, caching, security, error handling, logging, and API design." }
-];
+const SERVER_STARTED_AT = new Date().toISOString();
 
 const PORTFOLIO_TOOLS: PortfolioTool[] = [
   {
@@ -85,6 +76,17 @@ const PORTFOLIO_TOOLS: PortfolioTool[] = [
     title: "List Copilot Guides",
     description: "Return the available copilot guides as resource links",
     schema: {}
+  },
+  {
+    name: "generate-project-instructions",
+    title: "Generate Project Instructions",
+    description: "Generate .github/copilot-instructions.md from the local copilot guides (writes file by default).",
+    schema: {
+      guideIds: "string[] (optional; default all guides)",
+      projectRoot: "string (optional absolute path; default MCP_PROJECT_ROOT or cwd)",
+      outputPath: "string (optional; default .github/copilot-instructions.md)",
+      writeFile: "boolean (optional; default true)"
+    }
   },
   {
     name: "list-docs",
@@ -173,7 +175,7 @@ const PORTFOLIO_ENDPOINTS: PortfolioEndpoint[] = [
     id: "mcp-endpoint",
     title: "MCP Endpoint",
     method: "GET",
-    url: "https://davidjgrimsley.com/mcp/mrdj-app-mcp/mcp",
+    url: PORTFOLIO_MCP_ENDPOINT_URL,
     description: "Primary MCP server endpoint (SSE transport).",
     transport: "sse",
     contentType: "text/event-stream"
@@ -182,7 +184,7 @@ const PORTFOLIO_ENDPOINTS: PortfolioEndpoint[] = [
     id: "sse-messages",
     title: "SSE Messages (POST)",
     method: "POST",
-    url: "https://davidjgrimsley.com/mcp/mrdj-app-mcp/messages",
+    url: PORTFOLIO_SSE_MESSAGES_URL,
     description: "SSE transport message endpoint (used by legacy SSE MCP clients).",
     transport: "sse",
     contentType: "application/json"
@@ -191,7 +193,7 @@ const PORTFOLIO_ENDPOINTS: PortfolioEndpoint[] = [
     id: "portfolio-json",
     title: "Portfolio Metadata (portfolio.json)",
     method: "GET",
-    url: "https://davidjgrimsley.com/mcp/mrdj-app-mcp/portfolio.json",
+    url: PORTFOLIO_PORTFOLIO_URL,
     description: "The metadata that powers this page. Pretty meta huh?",
     contentType: "application/json"
   },
@@ -199,7 +201,7 @@ const PORTFOLIO_ENDPOINTS: PortfolioEndpoint[] = [
     id: "health",
     title: "Health Check",
     method: "GET",
-    url: "https://davidjgrimsley.com/mcp/mrdj-app-mcp/health",
+    url: PORTFOLIO_HEALTH_URL,
     description: "Server health status endpoint.",
     contentType: "application/json"
   }
@@ -585,6 +587,64 @@ async function loadGuide(fileName: string): Promise<{ uri: string; text: string 
   return { uri: toFileUri(filePath), text };
 }
 
+function resolveProjectRoot(inputRoot?: string): string {
+  if (inputRoot && inputRoot.trim()) return path.resolve(inputRoot);
+  return process.env.MCP_PROJECT_ROOT ? path.resolve(process.env.MCP_PROJECT_ROOT) : process.cwd();
+}
+
+function resolveOutputPath(projectRoot: string, outputPath?: string): string {
+  if (!outputPath || !outputPath.trim()) {
+    return path.join(projectRoot, ".github", "copilot-instructions.md");
+  }
+  return path.isAbsolute(outputPath) ? outputPath : path.join(projectRoot, outputPath);
+}
+
+function ensurePathInsideRoot(projectRoot: string, filePath: string): void {
+  const relative = path.relative(projectRoot, filePath);
+  if (relative.startsWith("..") || path.isAbsolute(relative)) {
+    throw new Error(`Output path must be inside project root: ${projectRoot}`);
+  }
+}
+
+async function buildProjectInstructions(guideIds: string[]): Promise<{
+  markdown: string;
+  sources: { id: string; title: string; uri: string }[];
+  missingGuideIds: string[];
+}> {
+  const sources: { id: string; title: string; uri: string }[] = [];
+  const missingGuideIds: string[] = [];
+  const sections: string[] = [];
+
+  for (const guideId of guideIds) {
+    const guide = guideMap.get(guideId);
+    if (!guide) {
+      missingGuideIds.push(guideId);
+      continue;
+    }
+    const { uri, text } = await loadGuide(guide.fileName);
+    sources.push({ id: guide.id, title: guide.title, uri });
+    sections.push(`### ${guide.title}\n\n${text.trim()}\n`);
+  }
+
+  const header = [
+    "# Copilot Instructions",
+    "",
+    "Generated from local MCP copilot guides.",
+    "",
+    "## Source Guides",
+    ...sources.map((s) => `- ${s.title} (${s.id}) -> ${s.uri}`),
+    "",
+    "## Instructions",
+    ""
+  ].join("\n");
+
+  return {
+    markdown: `${header}${sections.join("\n")}`.trimEnd() + "\n",
+    sources,
+    missingGuideIds
+  };
+}
+
 const server = new McpServer(
   {
     name: "mrdj-app-mcp",
@@ -646,6 +706,70 @@ server.registerTool(
         }
       ]
     };
+  }
+);
+
+server.registerTool(
+  "generate-project-instructions",
+  {
+    title: "Generate Project Instructions",
+    description: "Generate .github/copilot-instructions.md from the local copilot guides (writes file by default).",
+    inputSchema: z.object({
+      guideIds: z.array(z.string()).optional().describe("Guide ids to include (default: all guides)"),
+      projectRoot: z.string().optional().describe("Absolute path to project root (default MCP_PROJECT_ROOT or cwd)"),
+      outputPath: z
+        .string()
+        .optional()
+        .describe("Output path (default .github/copilot-instructions.md; relative paths are resolved from project root)"),
+      writeFile: z.boolean().optional().describe("Write the output file (default true)")
+    })
+  },
+  async (input: unknown) => {
+    const parsed = z
+      .object({
+        guideIds: z.array(z.string()).optional(),
+        projectRoot: z.string().optional(),
+        outputPath: z.string().optional(),
+        writeFile: z.boolean().optional()
+      })
+      .parse(input);
+
+    try {
+      const projectRoot = resolveProjectRoot(parsed.projectRoot);
+      const guideIds = parsed.guideIds?.length ? uniqueKeepOrder(parsed.guideIds) : guides.map((g) => g.id);
+      const { markdown, sources, missingGuideIds } = await buildProjectInstructions(guideIds);
+      const outputPath = resolveOutputPath(projectRoot, parsed.outputPath);
+
+      ensurePathInsideRoot(projectRoot, outputPath);
+
+      const shouldWrite = parsed.writeFile ?? true;
+      if (shouldWrite) {
+        await mkdir(path.dirname(outputPath), { recursive: true });
+        await writeFile(outputPath, markdown, "utf8");
+      }
+
+      const missingText = missingGuideIds.length ? `\nMissing guide ids: ${missingGuideIds.join(", ")}` : "";
+      const writeText = shouldWrite ? `\nWrote: ${outputPath}` : "\nWrite skipped (writeFile=false).";
+      const sourceText = sources.map((s) => `- ${s.title} (${s.id}) -> ${s.uri}`).join("\n");
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Generated copilot instructions.${writeText}${missingText}\n\nSources:\n${sourceText}\n\nPreview:\n${markdown}`
+          }
+        ]
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Failed to generate instructions. Error: ${error instanceof Error ? error.message : String(error)}`
+          }
+        ]
+      };
+    }
   }
 );
 
@@ -1140,7 +1264,7 @@ async function main() {
     }));
     
     // External path clients will POST to (through nginx)
-    const sseMessagesPathExternal = "/mcp/mrdj-app-mcp/messages";
+    const sseMessagesPathExternal = `${PUBLIC_MCP_SERVER_PATH}/messages`;
     // Internal path nginx proxies to
     const sseMessagesPathInternal = "/mcp/messages";
     
@@ -1185,10 +1309,16 @@ async function main() {
             mcpEndpointUrl: PORTFOLIO_MCP_ENDPOINT_URL,
             githubRepoUrl: PORTFOLIO_GITHUB_REPO_URL
           },
-          resources: PORTFOLIO_RESOURCES,
+          resources: guides.map((guide) => ({
+            id: guide.id,
+            title: guide.title,
+            fileName: guide.fileName,
+            description: guide.description
+          })),
           tools: PORTFOLIO_TOOLS,
           prompts: PORTFOLIO_PROMPTS,
-          endpoints: PORTFOLIO_ENDPOINTS
+          endpoints: PORTFOLIO_ENDPOINTS,
+          updatedAt: SERVER_STARTED_AT
         };
 
         // Compute ETag for conditional requests
