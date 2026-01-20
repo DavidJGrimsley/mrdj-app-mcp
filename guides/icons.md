@@ -49,8 +49,13 @@ Use this checklist for the full set of app + web assets. Filenames matter for au
 - **share-story.png** — 1080×1920 — PNG — Instagram story
 
 ### PWA files
-- **manifest.json** — PWA settings
-- **service-worker.js** — Offline support
+- **manifest.webmanifest** — PWA settings
+- **sw.js** — Offline support
+
+## DJsPortfolio paths & naming
+
+- The portfolio site uses `/public/icons` and mirrors assets under `/public/images/icons` so both `/icons` and `/images/icons` resolve correctly.
+- The manifest file is `public/manifest.webmanifest` and the service worker is `public/sw.js` (see [pwa.md](pwa.md)).
 
 ## SmartUtilify icon output layout
 

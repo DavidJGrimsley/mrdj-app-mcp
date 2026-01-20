@@ -58,6 +58,7 @@ type Finding = {
     | "nativewind-babel"
     | "nativewind-metro"
     | "nativewind-dts"
+    | "uniwind-types"
     | "stylesheet"
     | "tailwind-config"
     | "global-css";
@@ -321,6 +322,8 @@ export async function runConvertStylingTool(params: {
   if (Array.isArray(inputFiles) && inputFiles.length > 0) {
     const findings: Finding[] = [];
     const changes: Change[] = [];
+    let sawUniwindTypes = false;
+    let sawGlobalCss = false;
 
     const effectiveBase = (basePath ?? "(chat)").trim();
 
@@ -341,6 +344,7 @@ export async function runConvertStylingTool(params: {
         base === "tailwind.config.js" ||
         base === "tailwind.config.cjs" ||
         base === "nativewind.d.ts" ||
+        base === "uniwind-types.d.ts" ||
         base === "global.css";
 
       const shouldRead = isConfigCandidate || scanExts.has(ext);
@@ -357,6 +361,11 @@ export async function runConvertStylingTool(params: {
         if (apply) {
           changes.push({ file: rel, action: "delete", reason: "Delete nativewind.d.ts (Uniwind migration step)." });
         }
+        continue;
+      }
+
+      if (base === "uniwind-types.d.ts") {
+        sawUniwindTypes = true;
         continue;
       }
 
@@ -440,6 +449,7 @@ export async function runConvertStylingTool(params: {
 
       // global.css: normalize imports (return edit)
       if (base === "global.css" || /\bglobal\.css$/.test(rel)) {
+        sawGlobalCss = true;
         const before = raw;
         const { updated, changed } = upsertUniwindCssImports(before);
         if (changed && updated !== before) {
@@ -469,6 +479,14 @@ export async function runConvertStylingTool(params: {
         const codeFindings = scanCodeFindings(raw).map((finding) => ({ ...finding, file: rel }));
         findings.push(...codeFindings);
       }
+    }
+
+    if (sawGlobalCss && !sawUniwindTypes) {
+      findings.push({
+        file: "uniwind-types.d.ts",
+        kind: "uniwind-types",
+        message: "global.css found but uniwind-types.d.ts is missing. Add it to enable className typing for Uniwind."
+      });
     }
 
     const findingsByKind = findings.reduce<Record<string, number>>((acc, fnd) => {
@@ -553,6 +571,8 @@ export async function runConvertStylingTool(params: {
 
   const findings: Finding[] = [];
   const changes: Change[] = [];
+  let sawUniwindTypes = false;
+  let sawGlobalCss = false;
 
   // guideSha computed above
 
@@ -573,6 +593,7 @@ export async function runConvertStylingTool(params: {
       base === "tailwind.config.js" ||
       base === "tailwind.config.cjs" ||
       base === "nativewind.d.ts" ||
+      base === "uniwind-types.d.ts" ||
       base === "global.css";
 
     const shouldRead = isConfigCandidate || scanExts.has(ext);
@@ -584,6 +605,11 @@ export async function runConvertStylingTool(params: {
         await unlink(absPath);
         changes.push({ file: rel, action: "delete", reason: "Deleted nativewind.d.ts (Uniwind migration step)." });
       }
+      continue;
+    }
+
+    if (base === "uniwind-types.d.ts") {
+      sawUniwindTypes = true;
       continue;
     }
 
@@ -648,6 +674,7 @@ export async function runConvertStylingTool(params: {
 
     // global.css
     if (base === "global.css" || /\bglobal\.css$/.test(rel)) {
+      sawGlobalCss = true;
       const before = raw;
       const { updated, changed } = upsertUniwindCssImports(before);
       if (changed && updated !== before) {
@@ -665,6 +692,14 @@ export async function runConvertStylingTool(params: {
       const codeFindings = scanCodeFindings(raw).map((f) => ({ ...f, file: rel }));
       findings.push(...codeFindings);
     }
+  }
+
+  if (sawGlobalCss && !sawUniwindTypes) {
+    findings.push({
+      file: "uniwind-types.d.ts",
+      kind: "uniwind-types",
+      message: "global.css found but uniwind-types.d.ts is missing. Add it to enable className typing for Uniwind."
+    });
   }
 
   const findingsByKind = findings.reduce<Record<string, number>>((acc, f) => {

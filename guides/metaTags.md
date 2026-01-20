@@ -8,6 +8,11 @@ This guide provides step-by-step instructions for implementing comprehensive SEO
 - Define page-specific title, description, and keywords variables
 - Use the web URL `https://pokepages.app` for canonical links
 
+### DJsPortfolio Defaults
+- Use your portfolio domain (e.g. `https://davidjgrimsley.com`) for canonical links.
+- Centralize repeated SEO text in `src/constants/seo.ts` to avoid duplication.
+- Store preview images under `public/images/` and reference them with absolute URLs.
+
 ## Heading Hierarchy & Accessibility Guidelines
 
 ### Proper Heading Structure

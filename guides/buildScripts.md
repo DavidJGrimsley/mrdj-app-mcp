@@ -1,13 +1,18 @@
 # Build & Export Scripts
 
 ## Sitemap Generation
-- Entry: `scripts/generateSitemap.ts` (copied to [copilot/files/generateSitemap.ts](files/generateSitemap.ts)).
+- Entry: `scripts/generate-sitemap.mjs`.
 - Flow:
   - Runs `npx expo export -p web` (respects `dist/` output if present).
   - Reads `dist/server/app/+html.js` for Expo Router static paths, filters out dynamic or disabled routes, and applies optional extra routes.
   - Excludes patterns: `_sitemap`, `_not-found`, `_layout`, `/api/`, `/ai/`, `/dex-tracker/`, `/fave`, `/profile`, `/settings`, `/app-events`, `/map`.
   - Assigns `priority`/`changefreq` per route map, writes `public/sitemap.xml`, then copies to `dist/sitemap.xml` when `dist` exists.
-- Run locally: `npx ts-node scripts/generateSitemap.ts` (ensure `expo export` available). After running, deploy `dist/` so the generated sitemap ships with the web build.
+- Run locally: `node scripts/generate-sitemap.mjs` (ensure `expo export` available). After running, deploy `dist/` so the generated sitemap ships with the web build.
+
+## Icon Copy (DJsPortfolio)
+- Entry: `scripts/copy-icons.mjs`
+- Purpose: mirror generated icon assets into `public/icons` and `public/images/icons`.
+- This is the DJsPortfolio variant of the `copy-pwa-icons` script described in [icons.md](icons.md).
 
 ## API Server Build (Windows PowerShell)
 - Entry: `scripts/build-api-server-win.ps1` (copied to [copilot/files/build-api-server-win.ps1](files/build-api-server-win.ps1)).

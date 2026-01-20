@@ -105,6 +105,27 @@ src/app/
 └── +html.tsx                        → Custom HTML root (web only)
 ```
 
+## DJsPortfolio Route Layout (Tabs-first)
+
+```
+src/app/
+├── _layout.tsx
+├── +html.tsx
+├── +not-found.tsx
+└── (tabs)/
+  ├── _layout.tsx
+  ├── index.tsx
+  ├── contact.tsx
+  ├── portfolio/
+  ├── services/
+  ├── public-facing/
+  └── pokemon/
+```
+
+Notes:
+- The portfolio app uses a tabs-first structure (no drawer group).
+- `public-facing/` is used for public landing content and MCP endpoints.
+
 ## Layouts
 
 ### Root Layout (`_layout.tsx`)

@@ -100,6 +100,12 @@ Import the CSS once at your root entry (Expo Router root layout / app root):
 import '@/global.css';
 ```
 
+## DJsPortfolio defaults
+
+- `global.css` lives at the project root (not under `src/`). Import it once in `src/app/_layout.tsx` (use a path alias or a relative import).
+- Keep `uniwind-types.d.ts` in the project root so TypeScript understands the `className` prop on React Native components.
+- The app uses Uniwind only (no `nativewind/babel` preset, no `ThemeProvider`).
+
 ## Basic Usage
 
 ### Simple styling

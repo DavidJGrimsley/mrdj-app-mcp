@@ -5,7 +5,7 @@ _Disclaimer: Plesk is serving the **static web export** of the Expo app, not run
 ## Static Web (primary pokepages.app)
 - Build: `npx expo export -p web` (produces `dist/`).
 - Deploy: drag-and-drop contents of `dist/` into `/httpdocs` in Plesk File Manager (or `rsync`/SFTP if preferred).
-- Keep `sitemap.xml`, `robots.txt`, `service-worker.js` in `/httpdocs` with the static site.
+- Keep `sitemap.xml`, `robots.txt`, `manifest.webmanifest`, and `sw.js` in `/httpdocs` with the static site.
 - Cache busting: exports include hashed assets; no extra step needed. If you see stale assets, clear the Plesk caching layer/CDN if enabled.
 - Rollback: keep dated `dist` zips; re-upload prior archive if needed.
 

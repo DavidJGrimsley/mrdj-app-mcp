@@ -2,6 +2,8 @@
 
 This index replaces the old general guide. Each topic now lives in its own focused doc.
 
+These guides now reflect DJsPortfolio conventions (Expo Router + Uniwind, `manifest.webmanifest`, `sw.js`, and the sitemap/icon pipelines in `scripts/`).
+
 - [architecture.md](architecture.md) — App layout, module boundaries, platform files, routing vs screens.
 - [stateManagement.md](stateManagement.md) — Zustand patterns, store structure, selectors, persistence.
 - [databaseArchitecture.md](databaseArchitecture.md) — Drizzle + Supabase schema, RLS, migrations, seed/fixtures.
