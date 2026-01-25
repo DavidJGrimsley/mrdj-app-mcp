@@ -6,6 +6,10 @@ PokePages uses **Uniwind** - fast Tailwind `className` bindings for React Native
 Key mindset:
 - Prefer `className` utilities over `StyleSheet.create()` for layout/spacing/typography.
 - Keep design tokens + theming in **CSS** (Uniwind), not in `tailwind.config.js`.
+- All design tokens live in `global.css` under `@layer theme`.
+- Do not define colors/spacing/typography in `tailwind.config.js` unless absolutely required for build-time utilities.
+- Keep `tailwind.config.js` minimal (content + plugins only).
+- Use CSS variables for theming and Uniwind utilities for usage.
 
 ## Why Uniwind?
 
