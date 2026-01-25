@@ -1,0 +1,41 @@
+We want to use Nunita fonts including
+Nunita Sans
+Nunita 
+Nunita Monospace
+and for display font we want
+Modak
+
+Primary color is blue(kinda light)
+#0F78C3
+  "twitter-blue": {
+    "50": "#e7f4fd",
+    "100": "#d0e9fb",
+    "200": "#a0d3f8",
+    "300": "#71bdf4",
+    "400": "#41a8f1",
+    "500": "#1292ed",
+    "600": "#0e75be",
+    "700": "#0b578e",
+    "800": "#073a5f",
+    "900": "#041d2f",
+    "950": "#021421"
+  }
+Secondary yellow
+#FEC419
+{
+  "school-bus-yellow": {
+    "50": "#fff9e6",
+    "100": "#fff2cc",
+    "200": "#fee59a",
+    "300": "#fed867",
+    "400": "#fecb34",
+    "500": "#febf01",
+    "600": "#cb9801",
+    "700": "#987201",
+    "800": "#654c01",
+    "900": "#332600",
+    "950": "#241b00"
+  }
+}
+Tertiary(grey)
+#8E9093

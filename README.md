@@ -30,6 +30,18 @@ This MCP includes lightweight tools for quick docs lookups during chat/code revi
 
 ## Project audit / conversion tools
 
+## Project context (business + style)
+Store high-level project intent and styling tokens in the top-level project/ folder:
+- project/info.md (business goals, audience, outcomes, app type)
+- project/style.md (fonts, color codes, spacing, component tone)
+
+The generate-project-instructions tool reads these files (falls back to project/info.txt and project/style.txt if needed) and merges them with the guides into .github/copilot-instructions.md.
+
+### Project intake + full build prompts
+- `ingest-project-context` converts project/info.txt + project/style.txt into markdown and deletes the .txt files by default.
+- Prompt `project-intake` runs ingestion then regenerates copilot instructions.
+- Prompt `full-app-build` summarizes context, asks clarifying questions once, then auto-starts tasks after answers.
+
 ### `convert-styling` (Uniwind)
 Scans a target project for styling usage and checks it against the local Uniwind styling guide (`guides/styling.md`).
 
