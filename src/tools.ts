@@ -34,6 +34,16 @@ type ProjectContext = {
   appType?: string;
 };
 
+type ChecklistItem = {
+  id: string;
+  title: string;
+  question: string;
+  guideIds: string[];
+  status: "answered" | "missing";
+  evidence?: string;
+  answerHint?: string;
+};
+
 export const PORTFOLIO_TOOLS: PortfolioTool[] = [
   {
     name: "ingest-project-context",
@@ -48,10 +58,28 @@ export const PORTFOLIO_TOOLS: PortfolioTool[] = [
     }
   },
   {
+    name: "project-preflight",
+    title: "Project Preflight Checklist",
+    description:
+      "Generate a checklist/quiz from guides + project context. Ensures project/info aligns with required build decisions before instructions are generated.",
+    schema: {
+      projectRoot: "string (optional absolute path; default MCP_PROJECT_ROOT or cwd)",
+      includeTemplate: "boolean (optional; default true)"
+    }
+  },
+  {
     name: "list-guides",
     title: "List Copilot Guides",
     description: "Return the available copilot guides as resource links",
     schema: {}
+  },
+  {
+    name: "read-guide",
+    title: "Read Copilot Guide",
+    description: "Return the full content of a copilot guide by id",
+    schema: {
+      id: "string (required; guide id from list-guides)"
+    }
   },
   {
     name: "generate-project-instructions",
@@ -562,6 +590,161 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function buildChecklistTemplate(): string {
+  return [
+    "# Project Info (Checklist-Aligned)",
+    "",
+    "## Summary",
+    "- App name:",
+    "- One-line description:",
+    "- App type: web | mobile | both | desktop",
+    "",
+    "## Users & Auth",
+    "- Will users sign in? (yes/no)",
+    "- Auth method (email/pass, magic link, SSO, OAuth, etc.):",
+    "- User roles (e.g. admin, employer, candidate):",
+    "",
+    "## Data & Storage",
+    "- Will you store user data? (yes/no)",
+    "- Primary data entities (tables/collections):",
+    "- RLS or permissions model:",
+    "",
+    "## Core Flows",
+    "- Key user flows (bullets):",
+    "- Admin flows (if any):",
+    "",
+    "## State & App Logic",
+    "- Shared app state needed across screens? (yes/no)",
+    "- Examples (auth, profile, filters, tasks, etc.):",
+    "",
+    "## Routing & Navigation",
+    "- Key routes/screens (bullets):",
+    "- Deep links or guarded routes (yes/no):",
+    "- Navigation style (stack | drawer | tabs | vertical tabs | custom):",
+    "",
+    "## Offline & Sync",
+    "- Offline support needed? (yes/no)",
+    "- Sync/conflict strategy (if yes):",
+    "",
+    "## Styling & UX",
+    "- Brand colors:",
+    "- Typography/fonts:",
+    "- Motion/animation notes:",
+    "",
+    "## Performance & Scale",
+    "- Expected data volume or scale constraints:",
+    "- Perf hotspots (lists, media, charts, etc.):",
+    "",
+    "## Deployment",
+    "- Target platforms:",
+    "- Hosting/deployment approach:",
+    "",
+    "## Compliance / Security",
+    "- Any compliance or security constraints:",
+    ""
+  ].join("\n");
+}
+
+function buildChecklistItems(context: ProjectContext): ChecklistItem[] {
+  const combined = [context.infoText, context.styleText].filter(Boolean).join("\n\n");
+  const lower = combined.toLowerCase();
+  const hasText = (pattern: RegExp) => pattern.test(lower);
+
+  const items: ChecklistItem[] = [
+    {
+      id: "app-type",
+      title: "App type",
+      question: "Is this web, mobile, both, or desktop?",
+      guideIds: ["routing"],
+      status: context.appType && context.appType !== "unspecified" ? "answered" : "missing",
+      evidence: context.appType && context.appType !== "unspecified" ? context.appType : undefined,
+      answerHint: "Choose web, mobile, both, or desktop."
+    },
+    {
+      id: "auth",
+      title: "Users & auth",
+      question: "Will users sign in? If yes, what auth method/roles?",
+      guideIds: ["architecture", "database-architecture"],
+      status: hasText(/\b(auth|login|sign\s*up|sign\s*in|account|user(s)?|roles?)\b/i) ? "answered" : "missing",
+      answerHint: "Example: Email/password with roles (admin/employer/candidate)."
+    },
+    {
+      id: "data-storage",
+      title: "Data & storage",
+      question: "Will you store user data? What are the core entities?",
+      guideIds: ["database-architecture"],
+      status: hasText(/\b(database|db|table|tables|schema|supabase|drizzle|storage)\b/i) ? "answered" : "missing",
+      answerHint: "List tables/entities and any RLS rules."
+    },
+    {
+      id: "state-management",
+      title: "Shared app state",
+      question: "Will data need to be shared across multiple screens (auth/profile/filters)?",
+      guideIds: ["state-management"],
+      status: hasText(/\b(state|store|zustand|global state|shared state)\b/i) ? "answered" : "missing",
+      answerHint: "If yes, we’ll use a store (e.g., Zustand) for shared state."
+    },
+    {
+      id: "routing",
+      title: "Routing & navigation",
+      question: "What are the main routes/screens, any guarded routes, and your navigation style?",
+      guideIds: ["routing"],
+      status: hasText(/\b(route|routing|screen|navigation|layout|deep link|deeplink)\b/i) ? "answered" : "missing",
+      answerHint: "List key screens and choose: stack | drawer | tabs | vertical tabs | custom."
+    },
+    {
+      id: "offline",
+      title: "Offline & sync",
+      question: "Do you need offline access or sync behavior?",
+      guideIds: ["offline-first"],
+      status: hasText(/\boffline|sync|conflict\b/i) ? "answered" : "missing",
+      answerHint: "If yes, mention storage + conflict rules."
+    },
+    {
+      id: "styling",
+      title: "Styling & branding",
+      question: "Do you have color, font, and visual style guidance?",
+      guideIds: ["styling"],
+      status: hasText(/\b(color|colors|font|typography|brand|theme|styling)\b/i) ? "answered" : "missing",
+      answerHint: "Provide primary/secondary colors, fonts, and vibe."
+    },
+    {
+      id: "animation",
+      title: "Animation & motion",
+      question: "Any motion/animation requirements?",
+      guideIds: ["animation"],
+      status: hasText(/\banimation|motion|transition|reanimated\b/i) ? "answered" : "missing",
+      answerHint: "Mention any specific animated flows or micro-interactions."
+    },
+    {
+      id: "performance",
+      title: "Performance constraints",
+      question: "Any performance constraints or large lists/media?",
+      guideIds: ["performance"],
+      status: hasText(/\bperformance|perf|list|flatlist|feed|scale|large data\b/i) ? "answered" : "missing",
+      answerHint: "Note big lists, media, or scale concerns."
+    },
+    {
+      id: "meta",
+      title: "SEO & meta",
+      question: "Need SEO/meta tags or share previews?",
+      guideIds: ["meta-tags"],
+      status: hasText(/\bseo|meta|open graph|og\b|twitter card\b/i) ? "answered" : "missing",
+      answerHint: "If web is involved, list SEO needs or social previews."
+    },
+    {
+      id: "deployment",
+      title: "Deployment & hosting",
+      question: "Where will it be hosted/deployed?",
+      guideIds: ["plesk-deployment", "build-scripts"],
+      status: hasText(/\bdeploy|deployment|hosting|plesk|nginx|pm2|build\b|ci\b|cdn\b/i) ? "answered" : "missing",
+      answerHint: "Plesk/NGINX, Vercel, EAS, etc."
+    }
+  ];
+
+  return items;
+}
+
 async function buildProjectInstructions(params: {
   guideIds: string[];
   guidesDir: string;
@@ -612,6 +795,14 @@ async function buildProjectInstructions(params: {
     ].filter((line) => line !== "");
 
     headerLines.splice(4, 0, ...contextLines, "");
+  }
+
+  const templateLines = ["## Project Info Template (Checklist-Aligned)", "", buildChecklistTemplate(), ""];
+  const instructionsIndex = headerLines.indexOf("## Instructions");
+  if (instructionsIndex !== -1) {
+    headerLines.splice(instructionsIndex, 0, ...templateLines);
+  } else {
+    headerLines.push(...templateLines);
   }
 
   return {
@@ -736,8 +927,7 @@ export function registerTools(params: {
     async () => {
       const listText = guides
         .map((guide) => {
-          const filePath = path.join(guidesDir, guide.fileName);
-          return `- ${guide.title} (${guide.description}) -> ${toFileUri(filePath)}`;
+          return `- ${guide.id}: ${guide.title} (${guide.description}) [file: ${guide.fileName}]`;
         })
         .join("\n");
 
@@ -745,7 +935,49 @@ export function registerTools(params: {
         content: [
           {
             type: "text",
-            text: `Available copilot guides (open with readResource):\n${listText}`
+            text: `Available copilot guides (use read-guide with id to fetch full content):\n${listText}`
+          }
+        ]
+      };
+    }
+  );
+
+  server.registerTool(
+    "read-guide",
+    {
+      title: "Read Copilot Guide",
+      description: "Return the full content of a copilot guide by id",
+      inputSchema: z.object({
+        id: z.string().min(1).describe("Guide id from list-guides")
+      })
+    },
+    async (input: unknown) => {
+      const parsed = z
+        .object({
+          id: z.string().min(1)
+        })
+        .parse(input);
+
+      const guide = guideMap.get(parsed.id);
+      if (!guide) {
+        const available = guides.map((g) => g.id).join(", ");
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Unknown guide id: ${parsed.id}. Available: ${available}`
+            }
+          ]
+        };
+      }
+
+      const { uri, text } = await loadGuide(guidesDir, guide.fileName);
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Guide: ${guide.title} (${guide.id})\nURI: ${uri}\n\n${text}`
           }
         ]
       };
@@ -824,6 +1056,78 @@ export function registerTools(params: {
           ]
         };
       }
+    }
+  );
+
+  server.registerTool(
+    "project-preflight",
+    {
+      title: "Project Preflight Checklist",
+      description:
+        "Generate a checklist/quiz from guides + project context. Ensures project/info aligns with required build decisions before instructions are generated.",
+      inputSchema: z.object({
+        projectRoot: z.string().optional().describe("Absolute path to project root (default MCP_PROJECT_ROOT or cwd)"),
+        includeTemplate: z.boolean().optional().describe("Include checklist-aligned project info template (default true)")
+      })
+    },
+    async (input: unknown) => {
+      const parsed = z
+        .object({
+          projectRoot: z.string().optional(),
+          includeTemplate: z.boolean().optional()
+        })
+        .parse(input);
+
+      const projectRoot = resolveProjectRoot(parsed.projectRoot);
+      const projectContext = await readProjectContext(projectRoot);
+      const checklist = buildChecklistItems(projectContext);
+
+      const missing = checklist.filter((item) => item.status === "missing");
+      const answered = checklist.filter((item) => item.status === "answered");
+
+      const lines: string[] = [];
+      lines.push("Project preflight checklist");
+      lines.push(`App type: ${projectContext.appType ?? "unspecified"}`);
+      lines.push(
+        `Context sources: info=${projectContext.infoSource ?? "none"}, style=${projectContext.styleSource ?? "none"}`
+      );
+      lines.push("");
+
+      lines.push("Answered:");
+      if (answered.length === 0) {
+        lines.push("- (none)");
+      } else {
+        for (const item of answered) {
+          lines.push(`- ${item.title}${item.evidence ? `: ${item.evidence}` : ""}`);
+        }
+      }
+
+      lines.push("");
+      lines.push("Missing (quiz):");
+      if (missing.length === 0) {
+        lines.push("- (none)");
+      } else {
+        for (const item of missing) {
+          const guideRefs = item.guideIds.length ? ` [guides: ${item.guideIds.join(", ")}]` : "";
+          const hint = item.answerHint ? ` Hint: ${item.answerHint}` : "";
+          lines.push(`- ${item.title}: ${item.question}${guideRefs}${hint}`);
+        }
+      }
+
+      if (parsed.includeTemplate ?? true) {
+        lines.push("");
+        lines.push("Template:");
+        lines.push(buildChecklistTemplate());
+      }
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: lines.join("\n")
+          }
+        ]
+      };
     }
   );
 

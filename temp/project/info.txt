@@ -1,0 +1,121 @@
+App name - Higher
+Basic info
+This will be an app and website for pairing job seekers and employers.
+We are not trying to be LinkedIn. LinkedIn has value as a networking platform and if we can validate people from their linkedIn profile then we will. We are not trying to be Indeed because Indeed sucks. Fuck Indeed, they make me repeat myself too much but they almost got it right. 
+There will be 2 main user types: candidate & employer
+
+This will be unlike Indeed or other platforms in several ways:
+No applications - the candidate does not need to fill out an application for every job that they would be a good match for- they are auto applied if the employer chooses their profile.
+No resumes - just profiles.
+Most importantly, not answering the same hundreds of questions for candidates and not going through a bunch of unqualified candidates that applied for employers.
+
+We do want to integrate to current top ALS and in house systems but not at the cost of not following the core principles. 
+
+Candidates and employees will be matched based on 3 Compatibility Factors (CF): Skills that apply to the work, and company fit(values, sector, etc.), basic compatibility(salary, area, remote, etc.)
+Key Terms
+Candidate - a user entity that needs a job
+Employer - a user entity that has a job opening and needs a candidate
+Company - a non-user entity that all employers must belong
+Job - a non-user entity that an Employer creates
+Compatibility Factors (CF) - 3 areas of compatibility that are taken into account when a candidate is matched with a job
+Task - A form, quiz, or other thing to do that falls into one of the 3 CF
+Task Queue - the list of tasks ordered by priority given when created by the developer.
+Admin - a user entity that works for THE APP COMPANY NAME
+Interview/Evaluation period - The 2? Week period after the employer starts an interview process with a candidate. 
+
+Core Principles of Hiring
+No more than 3 rounds of interviews including phone calls but not including a short IN-APP conversation
+No external communication with the candidate is permitted
+If you choose to start evaluating a candidate (effectively an application) and you don’t give them the job then you will send them a message with personalized actionable feedback as to why they were not hired. This is to be written by a human and not external AI. 
+No free work is permitted whatsoever
+Don’t attempt to add any questions that already exist or go against these policies
+No evaluation period is to last longer than 2? Weeks including messaging, interviews, and up to the point of the candidates IN-APP offer letter sent.
+
+Entities
+Candidates
+Candidates can only be in 10 Evaluation Pools at a time. They can still be added to a queue by employers. When they are added to queue they’ll get a notification and then if they drop a current ‘evaluation’ if they don’t like it to see what’s next. 
+Companies 
+Companies will be a separate entity like a user but not an actual user. Many employees can belong to a company. All employers must belong to a company. Every company must have an admin(can be owner or otherwise). All companies will be asked to verify themself before being able to use the platform (this will consist of a government document with an EIN number). Company verification will last 2 years before needing to be reverified. All employers must be verified with their company before being able to use the platform (a letter from their employer(CEO or otherwise), a signed job offer? Kelsey what do you think?). 
+In the case of an individual hiring another individual, they will still create a company but it may be their name or a DBA name but will still require some level of verification and be held to the same standards of any other company.
+
+First person to verify the company is automatically admin of the company. They can approve and create other employer accounts
+
+If admin access is not possible, a letter from the company CEO or something could work. 
+
+If out house recruiters are allowed, they’ll need an agreement from the company to verify before job posting. Or get access from the admin. 
+
+Possible email validation by asking employer for their work email (name@company.com) and sending them a magic link. They click the link and it takes them back to the app and they’re verified. 
+
+Job
+The employer will create a job. There will be a friendly warning reminder that the user has to follow the guidelines set forth in the Core Principles of Hiring. They have two routes: from existing or from scratch
+Flow
+Basic flow: (Needs to be very transparent that the app will require a paid subscription)
+User downloads the app/goes to the website
+Has no account -> sign up screen with just basic information:Name, Email address, password, boolean values for job seeker or candidate - both can be true meaning a use can be either a candidate or employer or both.
+Subscription message: This app is free to download but requires a paid subscription. Continue to learn more. 
+
+Candidate Flow
+First time/onboarding (needs to be tracked in supabase so that if the user closes the page they can come back to it later). 
+Message: Hello [name], we are so glad you’re here and we hope you don’t stay long. Our number one goal is to get you working with the right company as soon as possible. Button: Let’s Go 
+ (if on mobile) Prompts the user that they can do this from a computer if they so desire because we’re going to be uploading documents and filling out information. Ask user to upload their most current and comprehensive resume but do not waste time updating it because we’ll handle all that from now on. Even if they do not have one they can continue
+Message(Subscription) This is so before starting your subscription you can: set up your profile including experience, education, etc. Edit basic info, and download or export your profile in one of our resume templates. Once you have that set up, you start paying $1 a month so you can start your job journey.
+F
+Extended Onboarding/Tutorial 
+Will go over how the app works. (Maybe not in the MVP…)
+Home Screen
+Users will be presented with 3 scores that correspond to their 3 CF areas. This essentially is how much of the form they have filled out in the simplest sense. In a more complex CF there will be quizzes and other things for them to do but basically I’m thinking it should show three percentages in circles. They’re just visual and not clickable. Each will have a color that will be used for anything that has to do with that CF.
+Next will be the Today’s section.
+This will be populated based on a list(Task Queue) that essentially includes filling out all the forms available. We’ll give them a priority level of 1-5 which will determine where on the list they will go. Each task will also have an estimated time to complete.
+The Today section should have 25-35 minutes of tasks to do every day. The user should get a notification (when they choose during extended onboarding) that tells them they have tasks to complete.
+After they get done with today’s tasks the Today section will stay the same size but have a message that says have a nice day. It will also have a ‘i’ circle icon that opens a modal when tapped. 
+The today info modal
+should explain that the user has spent the recommended amount of time on their job search for the day. This time is subject to change and is there to protect your mental health and give a scrollable list of things (alternating b/w activities that have nothing to do with job search but are necessary for a normal house and good for mental health and activities that would make the candidate more hireable) that the user could do with the rest of their day such as: spend time on a hobby, brush up their portfolio, play with their pet, make a meaningful connection on LinkedIn, etc. 
+The bottom of the modal should have a button that says unlock more tasks which should open another modal or just slide the content in the current modal to the left while this next ‘unlock more tasks modal’.
+Unlock more tasks modal
+If you’d like to unlock more tasks please pay this small fee of $1. The monthly fee for the app is very low ($1) because we want this to be accessible to truly struggling unemployed people. If you are able to unlock more tasks then you would be supporting us in this endeavor. Thank you for understanding. We are here to support you.
+Button will check that the user has any more tasks to complete in their queue so they don’t get charged for no reason. open a one time purchase screen of ‘More Daily Tasks’ for $1. Then the user will get 1 more round of tasks. text:
+Unlock Tasks for others button/modal
+This gives the user the option to buy a round of extra tasks for another random user. When the other random user logs in and sees this notification, they can accept or deny. If they deny then it goes to the next person. If they accept then they have an option to send a short message to the sender thanking them. They do not have to do it that day- it should roll over to a time they can do it. Essentially the next time they run out of tasks, they should get a button that says Free extra tasks instead of unlock more tasks. 
+
+Employer Flow
+Creating a Job
+From Existing
+can paste in or upload a job description, or paste a link from a job posting website where they have it. This will prefill a lot of the fields. Then the user will see those fields and essentially be on the same path as from scratch.
+From Scratch
+
+The user will start at a very high level. We are purposely leaving out Job Title*. The app will continue to narrow them down (conditionally based on their answers to questions like sector) such as the following (all required):
+Field/Sector - such as healthcare, technology
+Full/Part time?
+Remote/Hybrid/In-person
+Start date
+Salary range
+… more basic questions
+Skills (skills will be split into two sections: Skilled Sectors and Specific Skills. Skilled Sectors will be like cooking, software development, medical field, sales, etc. Even our Specific Skills will be more general than indeed and other platforms. We don’t need a bunch of skills that mean close to the same thing).
+
+* Any time the user chooses other, there will be a field they can input text. This will be sent in a message to the admin. The Admin will either temporarily approve it (meaning it will be added as an option in the next app update or maybe the admin can even add it without the developer having to edit the code.) or deny it and suggest a category that we deem it fits in. Approved or denied, the employer user will get a notification. When the user gets denied they get a chance to dispute it. 
+** Job titles are fucking stupid and meaningless. We may have a predefined list of job titles that our system(with AI probably) will choose that Job Title should go with the job. If it can’t find one then it will just say a ‘Job 3d printing miniature Hospital Kitchens’ or something succinct. The employer will get a chance to approve it on the review screen.
+
+They will also choose from questions that are available in the DB. They can add other questions but they’ll need to be approved.
+
+Review screen will just display the job posting as the candidate will see it with a few things that the user may have to approve before hitting the final approve button on the bottom.
+After Creating a Job
+The job will be put into the system that matches them with candidates. The employer user will see a nice animation while this is happening with an estimated time based on how long it normally takes this process to finish but at least a minute. It could take a while just depending… But then the employer user will get a notification that they have new candidates to look at. The candidates will be in a sorted list. The sort will descend from the highest % candidate to the lowest. The % shown will be an average of all 3 CF. When the user taps on a candidate card then the %shown will animate onto the next screen and spread into 3 circles, one for each CF with the independent percentages. The employer user will then be able to view the candidates profile tailored to that job posting. 
+At the bottom of the profile there will be three buttons: 
+Deny which opens an alert that says ‘Do you want to remove this candidate from your list?’ 
+Yes or No. If the user chooses yes, the user is offered a chance to explain why and a message that their feedback would be used to improve their app experience so they are denying less applicants but it’s totally optional.
+Start which opens a ‘Start Evaluating’ modal that reiterates the core principles of hiring and has a back or confirm button at the bottom.
+Message button which opens a ‘One Message’ modal that says something like you can send this user one message if you have a quick clarification that would automatically disqualify them from this job. 
+Start Process(Evaluation Perod)
+No job can have more than 10 Active Candidates in the Evaluation period at once. 
+The employer user can now message the user(a generous but limited amount. If the candidate wants to extend the amount they can do so up to 2 times which makes it still not indefinite)
+The candidate user gets a notification that they have been chosen to start the interview process for a job and they can view the job description. They can auto deny the job if they want but they have to give good explanation so that we can prevent them being matched since our system is supposed to identify  jobs that they would want for sure.
+The Interview/Evaluation Period starts.
+After a candidate has been chosen by the employer to get the job, the other candidates that are in the interview process have to be addressed by the employer before the system will notify the chosen candidate. These messages are drafts and will be autodelivered when the chose candidate accepts the job offer. 
+The candidate then gets a notification that they have a job offer. They can go accept it, counter, or deny it. If they accept it then they got the job and can share it on linked in or whatever. If they counter it then they can edit the specific fields of the job offer like pay, hours, etc or just a general message if that’s necessary for what they want to change(like something in the job description). If they deny it then they are removed from that jobs list of active candidates automatically. 
+
+
+Admin Flow
+
+Data
+Questions
+As employers add jobs, they will add more questions which need to be approved. As the admin approves the questions, they can sort them into categories so they can be used by future employers when posting jobs. If a question is so specific that we don’t think

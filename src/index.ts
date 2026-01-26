@@ -220,7 +220,7 @@ server.registerPrompt(
           content: {
             type: "text",
             text:
-              "Steps:\n1) Run ingest-project-context to convert project/info.txt + project/style.txt into project/info.md + project/style.md and delete the .txt files.\n2) Run generate-project-instructions to rebuild .github/copilot-instructions.md using the new project context.\n3) Summarize what was produced and any missing context." 
+              "Steps:\n1) Run ingest-project-context to convert project/info.txt + project/style.txt into project/info.md + project/style.md and delete the .txt files.\n2) Run project-preflight to produce the checklist/quiz and the checklist-aligned project info template. Ask for missing answers.\n3) Run generate-project-instructions to rebuild .github/copilot-instructions.md using the updated project context.\n4) Summarize what was produced and any missing context." 
           }
         }
       ]
