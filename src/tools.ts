@@ -30,6 +30,7 @@ type ProjectContext = {
   styleText?: string;
   infoSource?: string;
   styleSource?: string;
+  generalVibe?: string;
   appType?: string;
 };
 
@@ -516,6 +517,8 @@ async function readProjectContext(projectRoot: string): Promise<ProjectContext> 
   const infoText = infoMdText ?? infoTxtText;
   const styleText = styleMdText ?? styleTxtText;
 
+  const generalVibe = styleText ? extractSection(styleText, "general vibe") : undefined;
+
   const combined = [infoText, styleText].filter(Boolean).join("\n\n");
   const appType = combined ? inferAppType(combined) : "unspecified";
 
@@ -524,8 +527,39 @@ async function readProjectContext(projectRoot: string): Promise<ProjectContext> 
     styleText,
     infoSource: infoMdText ? "project/info.md" : infoTxtText ? "project/info.txt" : undefined,
     styleSource: styleMdText ? "project/style.md" : styleTxtText ? "project/style.txt" : undefined,
+    generalVibe,
     appType
   };
+}
+
+function extractSection(text: string, heading: string): string | undefined {
+  const lines = text.split(/\r?\n/);
+  const headingRegex = new RegExp(`^\s*(#{1,6}\s*)?${escapeRegExp(heading)}\s*:?\s*$`, "i");
+  let start = -1;
+
+  for (let i = 0; i < lines.length; i += 1) {
+    if (headingRegex.test(lines[i])) {
+      start = i + 1;
+      break;
+    }
+  }
+
+  if (start === -1) return undefined;
+
+  const sectionLines: string[] = [];
+  for (let i = start; i < lines.length; i += 1) {
+    const line = lines[i];
+    if (/^\s*#{1,6}\s+/.test(line)) break;
+    if (headingRegex.test(line)) continue;
+    sectionLines.push(line);
+  }
+
+  const cleaned = sectionLines.join("\n").trim();
+  return cleaned.length ? cleaned : undefined;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 async function buildProjectInstructions(params: {
@@ -571,6 +605,7 @@ async function buildProjectInstructions(params: {
       "## Project Context",
       "",
       `- App type: ${context.appType ?? "unspecified"}`,
+      context.generalVibe ? `- General vibe: ${context.generalVibe}` : "",
       "",
       context.infoText ? "### Project Info\n\n" + context.infoText.trim() : "",
       context.styleText ? "### Project Style\n\n" + context.styleText.trim() : ""

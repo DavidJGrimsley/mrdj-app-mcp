@@ -1,9 +1,13 @@
+#Fonts
+
 We want to use Nunita fonts including
 Nunita Sans
 Nunita 
 Nunita Monospace
 and for display font we want
 Modak
+
+#Colors
 
 Primary color is blue(kinda light)
 #0F78C3
@@ -39,3 +43,6 @@ Secondary yellow
 }
 Tertiary(grey)
 #8E9093
+
+#General vibe
+Make it playful and exciting with cool animations
