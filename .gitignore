@@ -20,3 +20,5 @@ coverage/
 
 # Local artifacts
 claudeLogs/
+
+temp/

@@ -113,6 +113,7 @@ const guides = [
     { id: "animation", title: "Animation", fileName: "animation.md", description: "Reanimated setup, shared values, gestures, layout animations, and patterns." },
     { id: "meta-tags", title: "Meta Tags", fileName: "metaTags.md", description: "SEO/meta templates for Expo Router (OG/Twitter/structured data)." },
     { id: "offline-first", title: "Offline First", fileName: "offlineFirst.md", description: "Conflict resolution, sync strategy, storage, and NetInfo guidance." },
+    { id: "app-naming", title: "App Naming", fileName: "appNaming.md", description: "Complete checklist for updating app names in package.json, app.json, manifest, and bundle identifiers." },
     { id: "plesk-deployment", title: "Plesk Deployment", fileName: "pleskDeployment.md", description: "Plesk web/API deployment steps, env management, and rollback notes." },
     { id: "build-scripts", title: "Build Scripts", fileName: "buildScripts.md", description: "Sitemap generator and API build workflows." },
     { id: "index", title: "Index", fileName: "index.md", description: "Top-level index linking all copilot guides." },
@@ -156,22 +157,20 @@ registerTools({
 server.registerPrompt("project-intake", {
     title: "Project intake (normalize context)",
     description: "Turn raw project/info.txt + project/style.txt into clean markdown and prepare instructions.",
-    argsSchema: {}
-}, async () => {
+    argsSchema: {
+        displayName: z.string().optional().describe("App display name (e.g., 'Creatisphere'). If provided, skip the name question."),
+        companyDomain: z.string().optional().describe("Company domain for bundle IDs (e.g., 'com.yourcompany'; default 'com.example')"),
+        projectRoot: z.string().optional().describe("Absolute path to project root. If omitted, use the current VS Code workspace root / MCP project root.")
+    }
+}, async ({ displayName, companyDomain, projectRoot }) => {
+    const appNamingUri = toFileUri(path.join(guidesDir, guideMap.get("app-naming")?.fileName ?? ""));
     return {
         messages: [
-            {
-                role: "assistant",
-                content: {
-                    type: "text",
-                    text: "You are preparing project context for a build. Use the project/ folder as the source of truth. Convert raw txt into clean markdown, then generate copilot instructions that merge project context with guides. Keep output concise and actionable."
-                }
-            },
             {
                 role: "user",
                 content: {
                     type: "text",
-                    text: "Steps:\n1) Run ingest-project-context to convert project/info.txt + project/style.txt into project/info.md + project/style.md and delete the .txt files.\n2) Run generate-project-instructions to rebuild .github/copilot-instructions.md using the new project context.\n3) Summarize what was produced and any missing context."
+                    text: `YOU MUST EXECUTE ALL 6 STEPS SEQUENTIALLY. DO NOT SKIP ANY STEP.\n\nprojectRoot="${projectRoot || "USE_CURRENT_WORKSPACE_ROOT"}"\n\n[ ] STEP 1: mcp_mrdj-app-mcp_ingest-project-context\n    Args: { projectRoot }\n    Purpose: Convert project/info.txt + style.txt to .md (if .txt exists); no-op if .md already present\n\n[ ] STEP 2: mcp_mrdj-app-mcp_update-app-naming\n    Args: { projectRoot, displayName: "${displayName || "Creatisphere"}", companyDomain: "${companyDomain || "com.example"}" }\n    Purpose: Update package.json, app.json, manifest.webmanifest with app name\n\n[ ] STEP 3: mcp_mrdj-app-mcp_update-readme\n    Args: { projectRoot }\n    Purpose: Generate/update README.md from project context\n\n[ ] STEP 4: mcp_mrdj-app-mcp_project-preflight\n    Args: { projectRoot }\n    Purpose: Run checklist validation (reads .md or .txt files)\n\n[ ] STEP 5: mcp_mrdj-app-mcp_generate-project-todo\n    Args: { projectRoot }\n    Purpose: Generate project/TODO.md with routing, features, design tokens\n\n[ ] STEP 6: mcp_mrdj-app-mcp_generate-project-instructions\n    Args: { projectRoot }\n    Purpose: Regenerate .github/copilot-instructions.md\n\n---\n\nEXECUTION RULES:\n✓ Run steps 1-6 IN ORDER\n✓ Do NOT skip steps even if files exist\n✓ Do NOT stop after preflight (step 4)\n✓ Mark each step complete before proceeding\n✓ After ALL 6 steps: summarize files created/updated\n\n✗ Do NOT check package.json scripts\n✗ Do NOT run terminal commands\n✗ Use ONLY the 6 MCP tools listed above`
                 }
             }
         ]
@@ -188,14 +187,14 @@ server.registerPrompt("full-app-build", {
                 role: "assistant",
                 content: {
                     type: "text",
-                    text: "You are a senior builder. Use project/info.md and project/style.md as primary context, plus the MCP guides. First, summarize the project in 5-8 bullets, infer app type (web/app/both), then produce a detailed plan. Ask all clarifying questions in one list. After the user answers, auto-start tasks and keep a running todo list."
+                    text: "You are a senior builder. Assume project-intake steps are already complete. Use project/info.md and project/style.md as primary context, plus project/TODO.md and the MCP guides. Do NOT call project-intake tools (ingest-project-context, update-app-naming, update-readme, project-preflight, generate-project-todo, generate-project-instructions). First confirm you are operating on the correct project root; if project context is missing or MCP_PROJECT_ROOT is unset/points elsewhere, ask for the correct path or instruct to rerun project-intake. Do NOT mark the task completed until you have produced: (1) a 5-8 bullet project brief, (2) inferred app type (web/app/both), (3) app naming verification results, (4) a scoped execution plan with milestones + tasks, (5) a dependency checklist, and (6) a single list of clarifying questions. After the user answers, auto-start tasks and keep a running todo list."
                 }
             },
             {
                 role: "user",
                 content: {
                     type: "text",
-                    text: "Use the project context in project/ and the guides. Generate:\n- A readable project brief\n- A scoped execution plan (milestones + tasks)\n- A dependency checklist\n- Clarifying questions (single pass)\nAfter answers, begin implementation and update the todo list as you go."
+                    text: "Use the project context in project/, project/TODO.md, and the guides. Generate, in this order:\n- A readable project brief\n- Infer app type (web/app/both)\n- Verify app naming is complete (check package.json, app.json, public/manifest.webmanifest per app-naming guide) and list any mismatches\n- A scoped execution plan (milestones + tasks)\n- A dependency checklist\n- Clarifying questions (single pass, include app name if missing)\nAfter answers, begin implementation and update the todo list as you go. If app naming needs updates, do that first before building features. If project context files are missing, stop and ask for project-intake to be rerun (do not claim completion)."
                 }
             }
         ]

@@ -88,6 +88,158 @@ src/
 └── utils/               # Utility functions
 ```
 
+## Navigation Architecture Patterns
+
+### Choosing a Navigation Pattern
+
+The TODO generation process infers your app's navigation pattern from project info and proposes a file structure. Here are the four primary patterns:
+
+#### 1. **Tabs Pattern** (Simple, focused apps)
+**When to use:**
+- Single clear primary action (e.g., a 3-5 tab app)
+- iOS/Android guidelines favor bottom tabs
+- Limited secondary flows
+- Web-friendly (each tab has its own URL)
+
+**Structure example:**
+```
+app/
+  _layout.tsx                  (root + providers)
+  +html.tsx                    (web entry)
+  (tabs)/                      (bottom tab navigator)
+    _layout.tsx
+    index.tsx                  (home)
+    search.tsx                 (search)
+    profile.tsx                (profile)
+  auth/
+    sign-in.tsx
+    sign-up.tsx
+```
+
+**Benefits:** Simple, familiar pattern; great SEO on web; fast navigation
+**Drawbacks:** Limited to ~5 tabs before UX degrades
+
+---
+
+#### 2. **Drawer Pattern** (Feature-rich apps with many sections)
+**When to use:**
+- Many feature areas (8+)
+- Hierarchical information (drawer items → nested features)
+- Complex apps with roles or domains
+- Mobile apps that want more screen space
+
+**Structure example:**
+```
+app/
+  _layout.tsx                  (root + providers)
+  +html.tsx
+  (drawer)/                    (drawer navigator)
+    _layout.tsx
+    (tabs)/                    (optional nested tabs)
+      _layout.tsx
+      index.tsx
+      explore.tsx
+    guides/
+      index.tsx
+      [guide-name].tsx
+    events/
+      index.tsx
+      [event-id].tsx
+    profile/
+      index.tsx
+      settings.tsx
+  auth/
+    sign-in.tsx
+    sign-up.tsx
+```
+
+**Benefits:** Scalable; can hold many features; familiar mobile pattern
+**Drawbacks:** Less web-friendly (URLs harder to navigate); mobile gesture conflicts on iOS
+
+---
+
+#### 3. **Stack Pattern** (Linear flows, onboarding)
+**When to use:**
+- Onboarding sequences (step → step → step)
+- Wizard-like flows (checkout, form submission)
+- Linear user journeys with clear entry/exit
+- Mobile-first applications
+
+**Structure example:**
+```
+app/
+  _layout.tsx                  (root)
+  index.tsx                    (landing/login)
+  (onboarding)/                (stack navigator)
+    _layout.tsx
+    intro.tsx                  (step 1)
+    profile-setup.tsx          (step 2)
+    preferences.tsx            (step 3)
+    complete.tsx               (step 4)
+  (main)/                      (main app, separate stack)
+    _layout.tsx
+    index.tsx
+    [features].tsx
+```
+
+**Benefits:** Clear user flow; forces completion of steps; simple to understand
+**Drawbacks:** Users can't "skip ahead"; not flexible for exploratory apps
+
+---
+
+#### 4. **Hybrid Pattern** (Complex multi-role apps)
+**When to use:**
+- Marketplace apps (buyer → seller roles)
+- Admin/user role separation
+- Large apps with 10+ features AND sub-features
+- Multi-domain platforms
+
+**Structure example:**
+```
+app/
+  _layout.tsx                  (root, auth guards)
+  (drawer)/                    (drawer for main nav)
+    _layout.tsx
+    (tabs)/                    (if roles/domains have tabs)
+      _layout.tsx
+      index.tsx
+      [tab-features].tsx
+    marketplace/               (feature domain 1)
+      index.tsx
+      [product-id].tsx
+      seller/
+        _layout.tsx
+        listings.tsx
+        analytics.tsx
+    community/                 (feature domain 2)
+      _layout.tsx
+      index.tsx
+      [post-id].tsx
+    profile/
+      _layout.tsx
+      index.tsx
+      settings.tsx
+      account.tsx
+  auth/
+    sign-in.tsx
+    sign-up.tsx
+```
+
+**Benefits:** Highly scalable; can model complex user journeys; clear organization
+**Drawbacks:** Most complex to implement; requires clear planning upfront
+
+---
+
+### Common Navigation Gotchas
+
+1. **Auth Guard at Root**: Always check authentication at the root `_layout.tsx` or use Expo Router's `+not-found.tsx` to redirect
+2. **Tab Bar Persistence**: Use a layout group `(tabs)` to persist the tab bar across nested screens
+3. **Deep Linking**: Enable deep linking from day one (`app.json` configuration) to support links and web sharing
+4. **Back Button Handling**: Test Android back button (iOS swipe back) on real devices
+5. **Memory Management**: Avoid re-rendering entire navigation trees; use lazy loading for routes
+
+---
+
 ## Key Architectural Patterns
 
 ### 1. File-Based Routing (Expo Router)

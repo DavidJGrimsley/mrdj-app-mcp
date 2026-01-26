@@ -104,6 +104,13 @@ Import the CSS once at your root entry (Expo Router root layout / app root):
 import '@/global.css';
 ```
 
+## Color palette usage
+
+- Keep palette shades (50–950) in `@layer theme` as CSS variables for light/dark variants; the intake tool will auto-generate shades from the base hex in project/style.
+- Suggested mapping: 50–200 backgrounds/subtle surfaces, 300–400 borders/secondary fills, 500 primary actions, 600–700 hover/active/pressed, 800–950 text/overlays.
+- Use with Uniwind by referencing variables: `bg-[var(--color-primary-500)]`, `text-[var(--color-secondary-700)]`, or via utility classes that consume the variables.
+- If branding needs a specific stop, override that single shade in `global.css` and leave the rest auto-generated.
+
 ## DJsPortfolio defaults
 
 - `global.css` lives at the project root (not under `src/`). Import it once in `src/app/_layout.tsx` (use a path alias or a relative import).

@@ -37,10 +37,18 @@ Store high-level project intent and styling tokens in the top-level project/ fol
 
 The generate-project-instructions tool reads these files (falls back to project/info.txt and project/style.txt if needed) and merges them with the guides into .github/copilot-instructions.md.
 
+The generate-project-todo tool builds project/TODO.md from project/info.md + project/style.md. It extracts:
+- **Features, flows, and entities** from project/info.md
+- **Style tokens** (colors, fonts, spacing) from project/style.md
+- **Navigation pattern** (tabs, drawer, stack, or hybrid) inferred from project description
+- **Proposed file structure** (src/app/ layout with _layout.tsx files, feature groups, auth, etc.)
+
+This helps you kickstart development with a holistic plan that includes design system work + routing skeleton from day one.
+
 ### Project intake + full build prompts
 - `ingest-project-context` converts project/info.txt + project/style.txt into markdown and deletes the .txt files by default.
-- Prompt `project-intake` runs ingestion then regenerates copilot instructions.
-- Prompt `full-app-build` summarizes context, asks clarifying questions once, then auto-starts tasks after answers.
+- Prompt `project-intake` runs ingestion, generates project/TODO.md, then regenerates copilot instructions.
+- Prompt `full-app-build` summarizes context, asks clarifying questions once, then auto-starts tasks after answers (references project/TODO.md when present).
 
 ### `convert-styling` (Uniwind)
 Scans a target project for styling usage and checks it against the local Uniwind styling guide (`guides/styling.md`).

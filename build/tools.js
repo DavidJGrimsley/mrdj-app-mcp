@@ -17,10 +17,27 @@ export const PORTFOLIO_TOOLS = [
         }
     },
     {
+        name: "project-preflight",
+        title: "Project Preflight Checklist",
+        description: "Generate a checklist/quiz from guides + project context. Ensures project/info aligns with required build decisions before instructions are generated.",
+        schema: {
+            projectRoot: "string (optional absolute path; default MCP_PROJECT_ROOT or cwd)",
+            includeTemplate: "boolean (optional; default true)"
+        }
+    },
+    {
         name: "list-guides",
         title: "List Copilot Guides",
         description: "Return the available copilot guides as resource links",
         schema: {}
+    },
+    {
+        name: "read-guide",
+        title: "Read Copilot Guide",
+        description: "Return the full content of a copilot guide by id",
+        schema: {
+            id: "string (required; guide id from list-guides)"
+        }
     },
     {
         name: "generate-project-instructions",
@@ -30,6 +47,16 @@ export const PORTFOLIO_TOOLS = [
             guideIds: "string[] (optional; default all guides)",
             projectRoot: "string (optional absolute path; default MCP_PROJECT_ROOT or cwd)",
             outputPath: "string (optional; default .github/copilot-instructions.md)",
+            writeFile: "boolean (optional; default true)"
+        }
+    },
+    {
+        name: "generate-project-todo",
+        title: "Generate Project TODO",
+        description: "Generate project/TODO.md from project/info.md + project/style.md (writes file by default).",
+        schema: {
+            projectRoot: "string (optional absolute path; default MCP_PROJECT_ROOT or cwd)",
+            outputPath: "string (optional; default project/TODO.md)",
             writeFile: "boolean (optional; default true)"
         }
     },
@@ -90,6 +117,26 @@ export const PORTFOLIO_TOOLS = [
             includeExtensions: "string[] (optional)",
             excludeDirNames: "string[] (optional)",
             mode: "'uniwind-migration' (optional)"
+        }
+    },
+    {
+        name: "update-app-naming",
+        title: "Update App Naming",
+        description: "Update app name across package.json, app.json, public/manifest.webmanifest, and bundle identifiers based on display name.",
+        schema: {
+            projectRoot: "string (optional absolute path; default MCP_PROJECT_ROOT or cwd)",
+            displayName: "string (required; human-readable app name, e.g., 'My App')",
+            companyDomain: "string (optional; for bundle ID, e.g., 'com.yourcompany'; default 'com.example')",
+            apply: "boolean (optional; default true)"
+        }
+    },
+    {
+        name: "update-readme",
+        title: "Update README",
+        description: "Generate or revise README.md based on project info and style context.",
+        schema: {
+            projectRoot: "string (optional absolute path; default MCP_PROJECT_ROOT or cwd)",
+            apply: "boolean (optional; default true)"
         }
     }
 ];
@@ -429,11 +476,173 @@ function resolveOutputPath(projectRoot, outputPath) {
     }
     return path.isAbsolute(outputPath) ? outputPath : path.join(projectRoot, outputPath);
 }
+function resolveTodoPath(projectRoot, outputPath) {
+    if (!outputPath || !outputPath.trim()) {
+        return path.join(projectRoot, "project", "TODO.md");
+    }
+    return path.isAbsolute(outputPath) ? outputPath : path.join(projectRoot, outputPath);
+}
 function ensurePathInsideRoot(projectRoot, filePath) {
     const relative = path.relative(projectRoot, filePath);
     if (relative.startsWith("..") || path.isAbsolute(relative)) {
         throw new Error(`Output path must be inside project root: ${projectRoot}`);
     }
+}
+function extractBulletLines(text) {
+    if (!text)
+        return [];
+    const lines = text.split(/\r?\n/);
+    const items = lines
+        .map((line) => line.trim())
+        .filter((line) => /^[-*•]\s+/.test(line))
+        .map((line) => line.replace(/^[-*•]\s+/, "").trim())
+        .filter((line) => line.length > 0);
+    return uniqueKeepOrder(items);
+}
+function extractCommaSeparatedList(text) {
+    if (!text)
+        return [];
+    return uniqueKeepOrder(text
+        .split(/[;,]/g)
+        .map((item) => item.trim())
+        .filter((item) => item.length > 0));
+}
+function extractStyleTokens(styleText) {
+    if (!styleText)
+        return [];
+    const lines = styleText.split(/\r?\n/).map((line) => line.trim());
+    const tokenLines = lines
+        .filter((line) => /--[a-z0-9-]+\s*:\s*#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})/i.test(line))
+        .map((line) => line.replace(/;+\s*$/, ""));
+    const hexLines = lines
+        .filter((line) => /#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})/i.test(line))
+        .filter((line) => !tokenLines.includes(line));
+    return uniqueKeepOrder([...tokenLines, ...hexLines]);
+}
+function normalizeHex(hex) {
+    const cleaned = hex.trim().replace(/^#/, "");
+    if (!/^([0-9a-f]{3}|[0-9a-f]{6})$/i.test(cleaned))
+        return null;
+    const normalized = cleaned.length === 3 ? cleaned.split("").map((c) => c + c).join("") : cleaned;
+    return `#${normalized.toUpperCase()}`;
+}
+function hexToRgb(hex) {
+    const normalized = normalizeHex(hex);
+    if (!normalized)
+        return null;
+    const value = normalized.replace("#", "");
+    const r = parseInt(value.slice(0, 2), 16);
+    const g = parseInt(value.slice(2, 4), 16);
+    const b = parseInt(value.slice(4, 6), 16);
+    return { r, g, b };
+}
+function rgbToHex(rgb) {
+    const toHex = (v) => Math.round(Math.min(255, Math.max(0, v))).toString(16).padStart(2, "0");
+    return `#${toHex(rgb.r)}${toHex(rgb.g)}${toHex(rgb.b)}`.toUpperCase();
+}
+function mixRgb(base, target, ratio) {
+    const clampRatio = Math.min(1, Math.max(0, ratio));
+    return {
+        r: base.r * (1 - clampRatio) + target.r * clampRatio,
+        g: base.g * (1 - clampRatio) + target.g * clampRatio,
+        b: base.b * (1 - clampRatio) + target.b * clampRatio
+    };
+}
+function generatePaletteFromHex(baseHex) {
+    const baseRgb = hexToRgb(baseHex);
+    if (!baseRgb)
+        return {};
+    const white = { r: 255, g: 255, b: 255 };
+    const black = { r: 0, g: 0, b: 0 };
+    const stops = {
+        50: { target: white, ratio: 0.92 },
+        100: { target: white, ratio: 0.85 },
+        200: { target: white, ratio: 0.7 },
+        300: { target: white, ratio: 0.55 },
+        400: { target: white, ratio: 0.35 },
+        500: { target: baseRgb, ratio: 0 },
+        600: { target: black, ratio: 0.12 },
+        700: { target: black, ratio: 0.24 },
+        800: { target: black, ratio: 0.36 },
+        900: { target: black, ratio: 0.5 },
+        950: { target: black, ratio: 0.6 }
+    };
+    const palette = {};
+    for (const [stop, config] of Object.entries(stops)) {
+        const mixed = config.ratio === 0 ? baseRgb : mixRgb(baseRgb, config.target, config.ratio);
+        palette[stop] = rgbToHex(mixed);
+    }
+    return palette;
+}
+function formatPaletteLines(palette, indent, prefix) {
+    const order = ["50", "100", "200", "300", "400", "500", "600", "700", "800", "900", "950"];
+    const safePrefix = prefix.replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, "").toLowerCase() || "primary";
+    const lines = [];
+    lines.push(`${indent}- Palette:`);
+    for (const key of order) {
+        if (palette[key])
+            lines.push(`${indent}  - ${key}: ${palette[key]}`);
+    }
+    lines.push(`${indent}- CSS variables (prefix: ${safePrefix}):`);
+    for (const key of order) {
+        if (palette[key])
+            lines.push(`${indent}  - --color-${safePrefix}-${key}: ${palette[key]};`);
+    }
+    return lines;
+}
+function enhanceStyleTextWithPalettes(styleText) {
+    const lines = styleText.split(/\r?\n/);
+    const headingMatches = [];
+    for (let i = 0; i < lines.length; i += 1) {
+        const match = lines[i].match(/^#{1,6}\s+(.*)$/);
+        if (match)
+            headingMatches.push({ index: i, title: match[1].trim() });
+    }
+    if (headingMatches.length === 0) {
+        headingMatches.push({ index: 0, title: "Project Style" });
+    }
+    const sections = [];
+    for (let i = 0; i < headingMatches.length; i += 1) {
+        const start = headingMatches[i].index + 1;
+        const end = headingMatches[i + 1]?.index ?? lines.length;
+        sections.push({ start, end, title: headingMatches[i].title });
+    }
+    const shadeRegex = /(palette\b|\b50\s*:\s*#|--color-[a-z0-9-]*50)/i;
+    const hexRegex = /#([0-9a-f]{3}|[0-9a-f]{6})/i;
+    let changed = false;
+    for (const section of sections) {
+        const slice = lines.slice(section.start, section.end);
+        if (!slice.length)
+            continue;
+        const paletteExists = slice.some((line) => shadeRegex.test(line));
+        if (paletteExists)
+            continue;
+        let hexValue = null;
+        let hexLineIndex = -1;
+        for (let i = 0; i < slice.length; i += 1) {
+            const found = slice[i].match(hexRegex);
+            if (found) {
+                hexValue = found[0];
+                hexLineIndex = section.start + i;
+                break;
+            }
+        }
+        if (!hexValue || hexLineIndex === -1)
+            continue;
+        const palette = generatePaletteFromHex(hexValue);
+        if (Object.keys(palette).length === 0)
+            continue;
+        const indent = (lines[hexLineIndex].match(/^(\s*)/)?.[1] ?? "");
+        const prefix = /secondary/i.test(section.title)
+            ? "secondary"
+            : /tertiary|neutral/i.test(section.title)
+                ? "neutral"
+                : "primary";
+        const block = formatPaletteLines(palette, indent, prefix);
+        lines.splice(hexLineIndex + 1, 0, ...block);
+        changed = true;
+    }
+    return changed ? lines.join("\n") : styleText;
 }
 function inferAppType(text) {
     const lower = text.toLowerCase();
@@ -513,6 +722,705 @@ function extractSection(text, heading) {
 function escapeRegExp(value) {
     return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
+function buildChecklistTemplate() {
+    return [
+        "# Project Info (Checklist-Aligned)",
+        "",
+        "## Summary",
+        "- App name:",
+        "- One-line description:",
+        "- App type: web | mobile | both | desktop",
+        "",
+        "## Users & Auth",
+        "- Will users sign in? (yes/no)",
+        "- Auth method (email/pass, magic link, SSO, OAuth, etc.):",
+        "- User roles (e.g. admin, employer, candidate):",
+        "",
+        "## Data & Storage",
+        "- Will you store user data? (yes/no)",
+        "- Primary data entities (tables/collections):",
+        "- RLS or permissions model:",
+        "",
+        "## Core Flows",
+        "- Key user flows (bullets):",
+        "- Admin flows (if any):",
+        "",
+        "## State & App Logic",
+        "- Shared app state needed across screens? (yes/no)",
+        "- Examples (auth, profile, filters, tasks, etc.):",
+        "",
+        "## Routing & Navigation",
+        "- Key routes/screens (bullets):",
+        "- Deep links or guarded routes (yes/no):",
+        "- Navigation style (stack | drawer | tabs | vertical tabs | custom):",
+        "",
+        "## Offline & Sync",
+        "- Offline support needed? (yes/no)",
+        "- Sync/conflict strategy (if yes):",
+        "",
+        "## Styling & UX",
+        "- Brand colors:",
+        "- Typography/fonts:",
+        "- Motion/animation notes:",
+        "",
+        "## Performance & Scale",
+        "- Expected data volume or scale constraints:",
+        "- Perf hotspots (lists, media, charts, etc.):",
+        "",
+        "## Deployment",
+        "- Target platforms:",
+        "- Hosting/deployment approach:",
+        "",
+        "## Compliance / Security",
+        "- Any compliance or security constraints:",
+        ""
+    ].join("\n");
+}
+function buildChecklistItems(context) {
+    const combined = [context.infoText, context.styleText].filter(Boolean).join("\n\n");
+    const lower = combined.toLowerCase();
+    const hasText = (pattern) => pattern.test(lower);
+    const items = [
+        {
+            id: "app-type",
+            title: "App type",
+            question: "Is this web, mobile, both, or desktop?",
+            guideIds: ["routing"],
+            status: context.appType && context.appType !== "unspecified" ? "answered" : "missing",
+            evidence: context.appType && context.appType !== "unspecified" ? context.appType : undefined,
+            answerHint: "Choose web, mobile, both, or desktop."
+        },
+        {
+            id: "auth",
+            title: "Users & auth",
+            question: "Will users sign in? If yes, what auth method/roles?",
+            guideIds: ["architecture", "database-architecture"],
+            status: hasText(/\b(auth|login|sign\s*up|sign\s*in|account|user(s)?|roles?)\b/i) ? "answered" : "missing",
+            answerHint: "Example: Email/password with roles (admin/employer/candidate)."
+        },
+        {
+            id: "data-storage",
+            title: "Data & storage",
+            question: "Will you store user data? What are the core entities?",
+            guideIds: ["database-architecture"],
+            status: hasText(/\b(database|db|table|tables|schema|supabase|drizzle|storage)\b/i) ? "answered" : "missing",
+            answerHint: "List tables/entities and any RLS rules."
+        },
+        {
+            id: "state-management",
+            title: "Shared app state",
+            question: "Will data need to be shared across multiple screens (auth/profile/filters)?",
+            guideIds: ["state-management"],
+            status: hasText(/\b(state|store|zustand|global state|shared state)\b/i) ? "answered" : "missing",
+            answerHint: "If yes, we’ll use a store (e.g., Zustand) for shared state."
+        },
+        {
+            id: "routing",
+            title: "Routing & navigation",
+            question: "What are the main routes/screens, any guarded routes, and your navigation style?",
+            guideIds: ["routing"],
+            status: hasText(/\b(route|routing|screen|navigation|layout|deep link|deeplink)\b/i) ? "answered" : "missing",
+            answerHint: "List key screens and choose: stack | drawer | tabs | vertical tabs | custom."
+        },
+        {
+            id: "offline",
+            title: "Offline & sync",
+            question: "Do you need offline access or sync behavior?",
+            guideIds: ["offline-first"],
+            status: hasText(/\boffline|sync|conflict\b/i) ? "answered" : "missing",
+            answerHint: "If yes, mention storage + conflict rules."
+        },
+        {
+            id: "styling",
+            title: "Styling & branding",
+            question: "Do you have color, font, and visual style guidance?",
+            guideIds: ["styling"],
+            status: hasText(/\b(color|colors|font|typography|brand|theme|styling)\b/i) ? "answered" : "missing",
+            answerHint: "Provide primary/secondary colors, fonts, and vibe."
+        },
+        {
+            id: "animation",
+            title: "Animation & motion",
+            question: "Any motion/animation requirements?",
+            guideIds: ["animation"],
+            status: hasText(/\banimation|motion|transition|reanimated\b/i) ? "answered" : "missing",
+            answerHint: "Mention any specific animated flows or micro-interactions."
+        },
+        {
+            id: "performance",
+            title: "Performance constraints",
+            question: "Any performance constraints or large lists/media?",
+            guideIds: ["performance"],
+            status: hasText(/\bperformance|perf|list|flatlist|feed|scale|large data\b/i) ? "answered" : "missing",
+            answerHint: "Note big lists, media, or scale concerns."
+        },
+        {
+            id: "meta",
+            title: "SEO & meta",
+            question: "Need SEO/meta tags or share previews?",
+            guideIds: ["meta-tags"],
+            status: hasText(/\bseo|meta|open graph|og\b|twitter card\b/i) ? "answered" : "missing",
+            answerHint: "If web is involved, list SEO needs or social previews."
+        },
+        {
+            id: "deployment",
+            title: "Deployment & hosting",
+            question: "Where will it be hosted/deployed?",
+            guideIds: ["plesk-deployment", "build-scripts"],
+            status: hasText(/\bdeploy|deployment|hosting|plesk|nginx|pm2|build\b|ci\b|cdn\b/i) ? "answered" : "missing",
+            answerHint: "Plesk/NGINX, Vercel, EAS, etc."
+        }
+    ];
+    return items;
+}
+function extractSingleLineField(text, label) {
+    if (!text)
+        return undefined;
+    const regex = new RegExp(`^\\s*${escapeRegExp(label)}\\s*:?\\s*(.+)$`, "im");
+    const match = text.match(regex);
+    if (!match?.[1])
+        return undefined;
+    return match[1].trim();
+}
+function inferAppNavigation(infoText) {
+    const lower = infoText.toLowerCase();
+    // Look for explicit mentions
+    if (lower.includes("drawer") || lower.includes("side menu") || lower.includes("side navigation")) {
+        return {
+            pattern: "drawer",
+            description: "Drawer navigation with nested tabs (common for feature-rich apps)",
+            structure: [
+                "app/",
+                "  _layout.tsx (root, providers)",
+                "  +html.tsx (web entry)",
+                "  (drawer)/ (drawer navigator)",
+                "    _layout.tsx (drawer setup)",
+                "    (tabs)/ (tab bar)",
+                "      _layout.tsx (tab navigator)",
+                "      index.tsx (home tab)",
+                "      [other-tabs].tsx",
+                "    [feature-groups]/"
+            ]
+        };
+    }
+    if (lower.includes("tab") || lower.includes("bottom nav") || lower.includes("bottom tabs")) {
+        return {
+            pattern: "tabs",
+            description: "Tab-based navigation (ideal for simple, focused apps)",
+            structure: [
+                "app/",
+                "  _layout.tsx (root, providers)",
+                "  +html.tsx (web entry)",
+                "  (tabs)/ (tab navigator)",
+                "    _layout.tsx (tab bar setup)",
+                "    index.tsx (primary tab)",
+                "    [secondary].tsx (additional tabs)",
+                "  auth/ (outside tabs, for login/signup)"
+            ]
+        };
+    }
+    if (lower.includes("stack") || lower.includes("flow") || lower.includes("sequential")) {
+        return {
+            pattern: "stack",
+            description: "Stack-based navigation (good for onboarding or linear flows)",
+            structure: [
+                "app/",
+                "  _layout.tsx (root, providers)",
+                "  +html.tsx (web entry)",
+                "  index.tsx (entry point)",
+                "  (onboarding)/ (flow group)",
+                "    _layout.tsx (stack navigator)",
+                "    step1.tsx",
+                "    step2.tsx",
+                "  main/ (main app group)",
+                "    _layout.tsx (main stack)",
+                "    index.tsx (home)"
+            ]
+        };
+    }
+    // Infer from flow descriptions
+    if (lower.includes("marketplace") || lower.includes("multi-user") || lower.includes("roles") || lower.includes("complex")) {
+        return {
+            pattern: "hybrid",
+            description: "Hybrid: drawer + tabs + nested stacks (feature-rich multi-role apps)",
+            structure: [
+                "app/",
+                "  _layout.tsx (root, providers)",
+                "  (drawer)/ (drawer, if needed for many features)",
+                "    _layout.tsx (drawer navigator)",
+                "    (tabs)/ (if applicable)",
+                "      _layout.tsx (tab bar)",
+                "      [tab-features].tsx",
+                "    [feature-domains]/ (organized by domain)",
+                "      index.tsx",
+                "      [detail-route].tsx"
+            ]
+        };
+    }
+    // Default: tabs are common and safe
+    return {
+        pattern: "unknown",
+        description: "Infer from project specifics; default to tabs if in doubt",
+        structure: [
+            "app/",
+            "  _layout.tsx (root, providers, auth guards)",
+            "  (tabs)/ OR (drawer)/ (choose based on feature count)",
+            "    _layout.tsx (navigator setup)",
+            "    index.tsx (primary screen)",
+            "    [features]/"
+        ]
+    };
+}
+function buildScreenStructure(flows, features, navigationPattern) {
+    const screens = [...flows, ...features].map((s) => s
+        .toLowerCase()
+        .replace(/[^\w\s]/g, "")
+        .replace(/\s+/g, "-")
+        .slice(0, 30));
+    const primary = screens.slice(0, navigationPattern === "tabs" ? 3 : 2).filter(Boolean);
+    const groups = navigationPattern === "drawer" || navigationPattern === "hybrid" ? screens.slice(3, 6) : [];
+    const support = ["profile", "settings", "about", "help", "legal"];
+    return {
+        primaryScreens: uniqueKeepOrder(primary),
+        featureGroups: uniqueKeepOrder(groups),
+        supportScreens: uniqueKeepOrder(support.filter((s) => !screens.includes(s)))
+    };
+}
+function reformatProjectInfo(rawText) {
+    const lines = [];
+    lines.push("# Project Information\n");
+    // Try to extract app name
+    const appNameMatch = rawText.match(/(?:app name|name|title):\s*(.+)/i);
+    lines.push("## App Name");
+    lines.push(`- ${appNameMatch ? appNameMatch[1].trim() : "[Specify app name]"}\n`);
+    // Try to extract overview/description
+    lines.push("## Overview");
+    const overviewMatch = rawText.match(/(?:overview|description|about):\s*(.+?)(?=\n\n|\n#|$)/is);
+    if (overviewMatch) {
+        lines.push(`- ${overviewMatch[1].trim()}\n`);
+    }
+    else {
+        lines.push("- [Brief description of the app/website and its purpose]");
+        lines.push("- [What problem does it solve? Who is it for?]\n");
+    }
+    // Unique Value Proposition
+    lines.push("## Unique Value Proposition");
+    const uvpMatch = rawText.match(/(?:unique value|uvp|differentiat|competitive advantage):\s*(.+?)(?=\n\n|\n#|$)/is);
+    if (uvpMatch) {
+        lines.push(`- ${uvpMatch[1].trim()}\n`);
+    }
+    else {
+        lines.push("- [What makes this project different from competitors?]");
+        lines.push("- [Key features or philosophies that set it apart]\n");
+    }
+    // User Types
+    lines.push("## User Types");
+    const userTypesMatch = rawText.match(/(?:user types|users|roles):\s*(.+?)(?=\n\n|\n#|$)/is);
+    if (userTypesMatch) {
+        const types = userTypesMatch[1].trim().split(/\n|,/).filter(Boolean);
+        types.forEach(type => lines.push(`- ${type.trim()}`));
+        lines.push("");
+    }
+    else {
+        lines.push("- [List and describe all user types (e.g., Candidate, Employer, Admin, etc.)]\n");
+    }
+    // Core Principles
+    lines.push("## Core Principles");
+    const principlesMatch = rawText.match(/(?:principles|rules|guidelines|policies):\s*(.+?)(?=\n\n|\n#|$)/is);
+    if (principlesMatch) {
+        const principles = principlesMatch[1].trim().split(/\n(?=[-•*])|(?<=\.)\s+(?=[A-Z])/);
+        principles.forEach(principle => {
+            const cleaned = principle.trim().replace(/^[-•*]\s*/, "");
+            if (cleaned)
+                lines.push(`- ${cleaned}`);
+        });
+        lines.push("");
+    }
+    else {
+        lines.push("- [List the guiding principles or rules for the platform]\n");
+    }
+    // Key Terms & Entities
+    lines.push("## Key Terms & Entities");
+    const entitiesMatch = rawText.match(/(?:entities|terms|key terms|definitions):\s*(.+?)(?=\n\n|\n#|$)/is);
+    if (entitiesMatch) {
+        const entities = entitiesMatch[1].trim().split(/\n(?=[-•*])/);
+        entities.forEach(entity => {
+            const cleaned = entity.trim().replace(/^[-•*]\s*/, "");
+            if (cleaned)
+                lines.push(`- ${cleaned}`);
+        });
+        lines.push("");
+    }
+    else {
+        lines.push("- [Define all important terms and entities (e.g., Candidate, Employer, Company, Job, etc.)]\n");
+    }
+    // User Flows
+    lines.push("## User Flows");
+    const flowsMatch = rawText.match(/(?:user flows|flows|journeys|user journeys):\s*(.+?)(?=\n\n|\n#|$)/is);
+    if (flowsMatch) {
+        const flows = flowsMatch[1].trim().split(/\n(?=[-•*])/);
+        flows.forEach(flow => {
+            const cleaned = flow.trim().replace(/^[-•*]\s*/, "");
+            if (cleaned)
+                lines.push(`- ${cleaned}`);
+        });
+        lines.push("");
+    }
+    else {
+        lines.push("- [Describe the main user journeys (e.g., how a candidate gets matched, how an employer posts a job)]\n");
+    }
+    // Features
+    lines.push("## Features");
+    const featuresMatch = rawText.match(/(?:features|functionality):\s*(.+?)(?=\n\n|\n#|$)/is);
+    if (featuresMatch) {
+        const features = featuresMatch[1].trim().split(/\n(?=[-•*])/);
+        features.forEach(feature => {
+            const cleaned = feature.trim().replace(/^[-•*]\s*/, "");
+            if (cleaned)
+                lines.push(`- ${cleaned}`);
+        });
+        lines.push("");
+    }
+    else {
+        lines.push("- [List and briefly describe all major features]\n");
+    }
+    // Integration & Compliance
+    lines.push("## Integration & Compliance");
+    const integrationMatch = rawText.match(/(?:integration|compliance|verification):\s*(.+?)(?=\n\n|\n#|$)/is);
+    if (integrationMatch) {
+        lines.push(`- ${integrationMatch[1].trim()}\n`);
+    }
+    else {
+        lines.push("- [Any integrations (e.g., LinkedIn, ATS) or compliance requirements]\n");
+    }
+    // Admin & Moderation
+    lines.push("## Admin & Moderation");
+    const adminMatch = rawText.match(/(?:admin|moderation|administration):\s*(.+?)(?=\n\n|\n#|$)/is);
+    if (adminMatch) {
+        lines.push(`- ${adminMatch[1].trim()}\n`);
+    }
+    else {
+        lines.push("- [How are admins assigned? What are their powers and responsibilities?]\n");
+    }
+    // Additional Notes
+    lines.push("## Additional Notes");
+    const notesMatch = rawText.match(/(?:notes|additional|misc|other):\s*(.+?)(?=\n\n|\n#|$)/is);
+    if (notesMatch) {
+        lines.push(`- ${notesMatch[1].trim()}\n`);
+    }
+    else {
+        lines.push("- [Any other relevant information, edge cases, or future plans]\n");
+    }
+    lines.push("---");
+    lines.push("*Expand each section as needed for your specific project.*");
+    return lines.join("\n");
+}
+function reformatProjectStyle(rawText) {
+    const lines = [];
+    lines.push("# Style Guide\n");
+    // Fonts
+    lines.push("## Fonts");
+    const fontMatch = rawText.match(/(?:fonts?|typography):\s*(.+?)(?=\n\n|\n#|$)/is);
+    if (fontMatch) {
+        const fonts = fontMatch[1].trim().split(/\n/).filter(Boolean);
+        fonts.forEach(font => {
+            const cleaned = font.trim().replace(/^[-•*]\s*/, "");
+            if (cleaned)
+                lines.push(`- ${cleaned}`);
+        });
+        lines.push("");
+    }
+    else {
+        lines.push("- Primary font(s): [e.g., Nunito Sans, Nunito]");
+        lines.push("- Display font: [e.g., Modak]");
+        lines.push("- Font usage guidelines: [Where and how to use each font]\n");
+    }
+    // Colors - enhanced with palette generation
+    lines.push("## Colors");
+    // Try to find color definitions
+    const colorSection = rawText.match(/(?:colors?|palette):\s*(.+?)(?=\n\n(?=[A-Z])|$)/is);
+    if (colorSection) {
+        const colorText = colorSection[1];
+        const primaryMatch = colorText.match(/(?:primary|main).*?(?:#[0-9A-Fa-f]{6}|#[0-9A-Fa-f]{3})/i);
+        const secondaryMatch = colorText.match(/(?:secondary|accent).*?(?:#[0-9A-Fa-f]{6}|#[0-9A-Fa-f]{3})/i);
+        const tertiaryMatch = colorText.match(/(?:tertiary|neutral|grey|gray).*?(?:#[0-9A-Fa-f]{6}|#[0-9A-Fa-f]{3})/i);
+        if (primaryMatch) {
+            const hexMatch = primaryMatch[0].match(/#[0-9A-Fa-f]{6}|#[0-9A-Fa-f]{3}/);
+            if (hexMatch) {
+                const hex = hexMatch[0];
+                const palette = generatePaletteFromHex(hex);
+                lines.push("### Primary Color");
+                lines.push(`- Hex: ${hex}`);
+                lines.push("- Palette:");
+                formatPaletteLines(palette, "  ", "").forEach(line => lines.push(line));
+                lines.push("");
+            }
+        }
+        if (secondaryMatch) {
+            const hexMatch = secondaryMatch[0].match(/#[0-9A-Fa-f]{6}|#[0-9A-Fa-f]{3}/);
+            if (hexMatch) {
+                const hex = hexMatch[0];
+                const palette = generatePaletteFromHex(hex);
+                lines.push("### Secondary Color");
+                lines.push(`- Hex: ${hex}`);
+                lines.push("- Palette:");
+                formatPaletteLines(palette, "  ", "").forEach(line => lines.push(line));
+                lines.push("");
+            }
+        }
+        if (tertiaryMatch) {
+            const hexMatch = tertiaryMatch[0].match(/#[0-9A-Fa-f]{6}|#[0-9A-Fa-f]{3}/);
+            if (hexMatch) {
+                const hex = hexMatch[0];
+                lines.push("### Tertiary/Neutral Colors");
+                lines.push(`- Hex: ${hex}`);
+                lines.push("- Usage: [backgrounds, borders, etc.]\n");
+            }
+        }
+    }
+    if (!colorSection) {
+        lines.push("### Primary Color");
+        lines.push("- Name: [e.g., Twitter Blue]");
+        lines.push("- Hex: [e.g., #0F78C3]");
+        lines.push("- Palette: (auto-generated from Hex)\n");
+    }
+    // Spacing & Layout
+    lines.push("## Spacing & Layout");
+    const spacingMatch = rawText.match(/(?:spacing|layout|grid):\s*(.+?)(?=\n\n|\n#|$)/is);
+    if (spacingMatch) {
+        lines.push(`- ${spacingMatch[1].trim()}\n`);
+    }
+    else {
+        lines.push("- [Guidelines for margins, padding, and grid usage]\n");
+    }
+    // Components
+    lines.push("## Components");
+    const componentsMatch = rawText.match(/(?:components|ui elements):\s*(.+?)(?=\n\n|\n#|$)/is);
+    if (componentsMatch) {
+        lines.push(`- ${componentsMatch[1].trim()}\n`);
+    }
+    else {
+        lines.push("- Buttons: [Primary, secondary, disabled, etc.]");
+        lines.push("- Inputs: [Text fields, dropdowns, etc.]");
+        lines.push("- Cards, modals, alerts, etc.\n");
+    }
+    // Animations & Interactions
+    lines.push("## Animations & Interactions");
+    const animationsMatch = rawText.match(/(?:animations?|interactions?|vibe):\s*(.+?)(?=\n\n|\n#|$)/is);
+    if (animationsMatch) {
+        lines.push(`- ${animationsMatch[1].trim()}\n`);
+    }
+    else {
+        lines.push("- General vibe: [e.g., playful, exciting]");
+        lines.push("- Animation guidelines: [e.g., transitions, hover effects, loading states]\n");
+    }
+    // Accessibility
+    lines.push("## Accessibility");
+    const a11yMatch = rawText.match(/(?:accessibility|a11y):\s*(.+?)(?=\n\n|\n#|$)/is);
+    if (a11yMatch) {
+        lines.push(`- ${a11yMatch[1].trim()}\n`);
+    }
+    else {
+        lines.push("- Color contrast requirements");
+        lines.push("- Font size and readability");
+        lines.push("- Keyboard navigation\n");
+    }
+    // General Vibe
+    lines.push("## General Vibe");
+    const vibeMatch = rawText.match(/(?:general vibe|overall feel|aesthetic):\s*(.+?)(?=\n\n|\n#|$)/is);
+    if (vibeMatch) {
+        lines.push(`- ${vibeMatch[1].trim()}\n`);
+    }
+    else {
+        lines.push("- [Describe the overall look and feel: playful, professional, minimal, etc.]\n");
+    }
+    lines.push("---");
+    lines.push("*Expand each section as needed.*");
+    return lines.join("\n");
+}
+function buildProjectTodo(context) {
+    const infoText = context.infoText ?? "";
+    const styleText = context.styleText ?? "";
+    const appName = extractSingleLineField(infoText, "App Name") ??
+        extractSingleLineField(infoText, "App name") ??
+        extractSingleLineField(infoText, "Name");
+    const featuresSection = extractSection(infoText, "Features") ??
+        extractSection(infoText, "Core Features") ??
+        extractSection(infoText, "Feature Set");
+    const flowsSection = extractSection(infoText, "User Flows") ?? extractSection(infoText, "Core Flows");
+    const entitiesSection = extractSection(infoText, "Key Terms & Entities") ??
+        extractSection(infoText, "Data & Storage") ??
+        extractSection(infoText, "Entities");
+    const routesSection = extractSection(infoText, "Routing & Navigation") ??
+        extractSection(infoText, "Routes") ??
+        extractSection(infoText, "Screens");
+    const features = extractBulletLines(featuresSection).length
+        ? extractBulletLines(featuresSection)
+        : extractBulletLines(infoText);
+    const flows = extractBulletLines(flowsSection);
+    const entityBullets = extractBulletLines(entitiesSection);
+    const entityInline = extractSingleLineField(infoText, "Primary data entities") ??
+        extractSingleLineField(infoText, "Primary entities") ??
+        extractSingleLineField(infoText, "Entities");
+    const entities = uniqueKeepOrder([
+        ...entityBullets,
+        ...extractCommaSeparatedList(entityInline)
+    ]);
+    const routes = extractBulletLines(routesSection);
+    const styleTokens = extractStyleTokens(styleText);
+    const featureLines = features.length
+        ? features.map((feature) => `- [ ] ${feature}`)
+        : ["- [ ] Define MVP feature set from project info and stakeholders"];
+    const flowLines = flows.length
+        ? flows.map((flow) => `- [ ] ${flow}`)
+        : ["- [ ] Draft core user flows (onboarding → primary action → retention loop)"];
+    const entityHint = entities.length ? entities.join(", ") : "Define entities (users, profiles, projects, tasks, posts, etc.)";
+    const routeLines = routes.length
+        ? routes.map((route) => `- [ ] ${route}`)
+        : ["- [ ] Map primary routes/screens and navigation layout"];
+    // Infer navigation pattern and structure
+    const navInference = inferAppNavigation(infoText);
+    const screenStructure = buildScreenStructure(flows, features, navInference.pattern);
+    const lines = [];
+    lines.push("# Project TODO");
+    lines.push("");
+    lines.push(`Generated from ${context.infoSource ?? "project/info.md"}${context.styleSource ? ` + ${context.styleSource}` : ""}.`);
+    lines.push("");
+    lines.push("## App Snapshot");
+    lines.push(`- App type: ${context.appType ?? "unspecified"}`);
+    if (appName)
+        lines.push(`- App name: ${appName}`);
+    if (context.generalVibe)
+        lines.push(`- General vibe: ${context.generalVibe}`);
+    lines.push("");
+    lines.push("## Milestones");
+    lines.push("- [ ] M1 — Foundations: routing skeleton, design tokens, auth shell, environment config");
+    lines.push("- [ ] M2 — Data layer: Drizzle schemas, migrations, Supabase setup + RLS policies, seed data");
+    lines.push("- [ ] M3 — Core features: implement feature backlog + core flows");
+    lines.push("- [ ] M4 — Backend APIs: define endpoints, implement services, integrate client");
+    lines.push("- [ ] M5 — Polish & release: performance, QA, deployment, analytics");
+    lines.push("");
+    lines.push("## Design System & Theming (Early)");
+    lines.push("- [ ] Translate project/style.md into src/global.css @layer theme tokens (light + dark)");
+    lines.push("- [ ] Wire typography (primary + display fonts) in global.css and layout");
+    if (styleTokens.length) {
+        const previewTokens = styleTokens.slice(0, 10).join(" | ");
+        const moreCount = styleTokens.length > 10 ? ` (+${styleTokens.length - 10} more)` : "";
+        lines.push(`- [ ] Implement color tokens from style.md: ${previewTokens}${moreCount}`);
+    }
+    else {
+        lines.push("- [ ] Extract color palette + spacing scale from project/style.md and create tokens");
+    }
+    lines.push("- [ ] Map button/input/card variants to tokens (primary/secondary/ghost)");
+    lines.push("");
+    lines.push("## File Routing & Structure (M1)");
+    lines.push(`- [ ] Inferred pattern: **${navInference.pattern}** — ${navInference.description}`);
+    lines.push(`- [ ] Proposed app structure:`);
+    navInference.structure.forEach((line) => lines.push(`    ${line}`));
+    if (screenStructure.primaryScreens.length) {
+        lines.push(`- [ ] Primary screens: ${screenStructure.primaryScreens.join(", ")}`);
+    }
+    if (screenStructure.featureGroups.length) {
+        lines.push(`- [ ] Feature groups (if drawer/hybrid): ${screenStructure.featureGroups.join(", ")}`);
+    }
+    if (screenStructure.supportScreens.length) {
+        lines.push(`- [ ] Support screens: ${screenStructure.supportScreens.join(", ")}`);
+    }
+    lines.push("- [ ] Create all _layout.tsx files for navigators (root, drawer/tabs, feature groups)");
+    lines.push("- [ ] Set up auth guards + deep linking (if multi-platform)");
+    lines.push("");
+    lines.push("## Feature Backlog");
+    lines.push(...featureLines);
+    lines.push("");
+    lines.push("## Core Flows");
+    lines.push(...flowLines);
+    lines.push("");
+    lines.push("## Data & Schema (Drizzle + Supabase)");
+    lines.push(`- [ ] Define entities & relationships: ${entityHint}`);
+    lines.push("- [ ] Draft Drizzle schemas + Zod validators");
+    lines.push("- [ ] Create migrations and apply to Supabase");
+    lines.push("- [ ] Configure RLS policies + roles");
+    lines.push("- [ ] Add seed data or fixtures for development");
+    lines.push("");
+    lines.push("## Backend APIs");
+    lines.push("- [ ] Define API surface (REST endpoints + payloads)");
+    lines.push("- [ ] Implement services for core entities");
+    lines.push("- [ ] Add validation, auth guards, and error handling");
+    lines.push("- [ ] Integrate client API layer + typed responses");
+    lines.push("");
+    lines.push("## Frontend Screens & Navigation");
+    lines.push(...routeLines);
+    lines.push("- [ ] Build reusable components + states (loading/empty/error)");
+    lines.push("- [ ] Wire data fetching + state management (Zustand)");
+    lines.push("");
+    lines.push("## Integrations & Services");
+    lines.push("- [ ] Configure authentication provider (Supabase Auth / OAuth)");
+    lines.push("- [ ] Add file/media storage strategy");
+    lines.push("- [ ] Add payments or monetization flows (if required)");
+    lines.push("");
+    lines.push("## DevOps & Deployment");
+    lines.push("- [ ] Define environment variables + secrets management");
+    lines.push("- [ ] Set up build pipeline (EAS + web export)");
+    lines.push("- [ ] Configure hosting + domain + health checks");
+    lines.push("");
+    lines.push("## QA & Release");
+    lines.push("- [ ] Add smoke tests for core flows");
+    lines.push("- [ ] Performance audit (lists, startup, animations)");
+    lines.push("- [ ] Pre-release checklist + analytics");
+    lines.push("");
+    return {
+        markdown: `${lines.join("\n").trimEnd()}\n`,
+        derived: {
+            featureCount: features.length,
+            flowCount: flows.length,
+            entityCount: entities.length,
+            routeCount: routes.length
+        }
+    };
+}
+function buildProposedDefaults(context, items) {
+    const defaults = {};
+    const combined = [context.infoText, context.styleText].filter(Boolean).join("\n\n");
+    const lower = combined.toLowerCase();
+    // Analyze project context to suggest reasonable defaults
+    const isMarketplace = lower.includes("marketplace") || lower.includes("matching") || lower.includes("candidates") || lower.includes("employers");
+    const isMobile = context.appType === "mobile" || context.appType === "both";
+    const isWeb = context.appType === "web" || context.appType === "both";
+    for (const item of items) {
+        if (item.status !== "missing")
+            continue;
+        switch (item.id) {
+            case "state-management":
+                defaults["state-management"] = "yes: global state needed for auth, user profile, matching filters, and task queues (Zustand recommended)";
+                break;
+            case "offline":
+                defaults["offline"] = "no: real-time matching and task queue updates require active connection";
+                break;
+            case "meta":
+                defaults["meta"] = isWeb ? "yes: job listings and employer profiles should be shareable with OG tags" : "no: mobile app only";
+                break;
+            case "deployment":
+                const platforms = [];
+                if (isMobile)
+                    platforms.push("iOS App Store + Android Play Store (EAS Build)");
+                if (isWeb)
+                    platforms.push("Web deployment (Vercel or Plesk)");
+                const approach = isMarketplace ? "Supabase for data, Expo Router for mobile/web" : "Standard approach";
+                defaults["deployment"] = `targets: ${platforms.join(" + ") || "mobile + web"}; approach: ${approach}`;
+                break;
+            case "styling":
+                defaults["styling"] = "Modern, clean UI with primary action colors and role-based color coding (candidates vs employers)";
+                break;
+            case "animation":
+                defaults["animation"] = "Subtle micro-interactions for task transitions, progress indicators, and notifications";
+                break;
+            case "performance":
+                defaults["performance"] = isMarketplace ? "high-priority: efficiently handle job matching across large candidate pools and task queues" : "standard constraints";
+                break;
+        }
+    }
+    return defaults;
+}
 async function buildProjectInstructions(params) {
     const sources = [];
     const missingGuideIds = [];
@@ -550,6 +1458,14 @@ async function buildProjectInstructions(params) {
             context.styleText ? "### Project Style\n\n" + context.styleText.trim() : ""
         ].filter((line) => line !== "");
         headerLines.splice(4, 0, ...contextLines, "");
+    }
+    const templateLines = ["## Project Info Template (Checklist-Aligned)", "", buildChecklistTemplate(), ""];
+    const instructionsIndex = headerLines.indexOf("## Instructions");
+    if (instructionsIndex !== -1) {
+        headerLines.splice(instructionsIndex, 0, ...templateLines);
+    }
+    else {
+        headerLines.push(...templateLines);
     }
     return {
         markdown: `${headerLines.join("\n")}${sections.join("\n")}`.trimEnd() + "\n",
@@ -600,8 +1516,8 @@ export function registerTools(params) {
         }
         const infoMdPath = path.join(projectRoot, "project", "info.md");
         const styleMdPath = path.join(projectRoot, "project", "style.md");
-        const infoMarkdown = infoTxt ? `# Project Info\n\n${infoTxt.trim()}\n` : undefined;
-        const styleMarkdown = styleTxt ? `# Project Style\n\n${styleTxt.trim()}\n` : undefined;
+        const infoMarkdown = infoTxt ? reformatProjectInfo(infoTxt) : undefined;
+        const styleMarkdown = styleTxt ? reformatProjectStyle(styleTxt) : undefined;
         const shouldWrite = parsed.writeFile ?? true;
         const shouldDelete = parsed.deleteTxt ?? true;
         if (shouldWrite) {
@@ -652,15 +1568,48 @@ export function registerTools(params) {
     }, async () => {
         const listText = guides
             .map((guide) => {
-            const filePath = path.join(guidesDir, guide.fileName);
-            return `- ${guide.title} (${guide.description}) -> ${toFileUri(filePath)}`;
+            return `- ${guide.id}: ${guide.title} (${guide.description}) [file: ${guide.fileName}]`;
         })
             .join("\n");
         return {
             content: [
                 {
                     type: "text",
-                    text: `Available copilot guides (open with readResource):\n${listText}`
+                    text: `Available copilot guides (use read-guide with id to fetch full content):\n${listText}`
+                }
+            ]
+        };
+    });
+    server.registerTool("read-guide", {
+        title: "Read Copilot Guide",
+        description: "Return the full content of a copilot guide by id",
+        inputSchema: z.object({
+            id: z.string().min(1).describe("Guide id from list-guides")
+        })
+    }, async (input) => {
+        const parsed = z
+            .object({
+            id: z.string().min(1)
+        })
+            .parse(input);
+        const guide = guideMap.get(parsed.id);
+        if (!guide) {
+            const available = guides.map((g) => g.id).join(", ");
+            return {
+                content: [
+                    {
+                        type: "text",
+                        text: `Unknown guide id: ${parsed.id}. Available: ${available}`
+                    }
+                ]
+            };
+        }
+        const { uri, text } = await loadGuide(guidesDir, guide.fileName);
+        return {
+            content: [
+                {
+                    type: "text",
+                    text: `Guide: ${guide.title} (${guide.id})\nURI: ${uri}\n\n${text}`
                 }
             ]
         };
@@ -728,6 +1677,150 @@ export function registerTools(params) {
                 ]
             };
         }
+    });
+    server.registerTool("generate-project-todo", {
+        title: "Generate Project TODO",
+        description: "Generate project/TODO.md from project context in /project (writes file by default).",
+        inputSchema: z.object({
+            projectRoot: z.string().optional().describe("Absolute path to project root (default MCP_PROJECT_ROOT or cwd)"),
+            outputPath: z
+                .string()
+                .optional()
+                .describe("Output path (default project/TODO.md; relative paths are resolved from project root)"),
+            writeFile: z.boolean().optional().describe("Write the output file (default true)")
+        })
+    }, async (input) => {
+        const parsed = z
+            .object({
+            projectRoot: z.string().optional(),
+            outputPath: z.string().optional(),
+            writeFile: z.boolean().optional()
+        })
+            .parse(input);
+        try {
+            const projectRoot = resolveProjectRoot(parsed.projectRoot);
+            const projectContext = await readProjectContext(projectRoot);
+            if (!projectContext.infoText && !projectContext.styleText) {
+                return {
+                    content: [
+                        {
+                            type: "text",
+                            text: "No project context found in /project. Run ingest-project-context first."
+                        }
+                    ]
+                };
+            }
+            const { markdown, derived } = buildProjectTodo(projectContext);
+            const outputPath = resolveTodoPath(projectRoot, parsed.outputPath);
+            ensurePathInsideRoot(projectRoot, outputPath);
+            const shouldWrite = parsed.writeFile ?? true;
+            if (shouldWrite) {
+                await mkdir(path.dirname(outputPath), { recursive: true });
+                await writeFile(outputPath, markdown, "utf8");
+            }
+            const writeText = shouldWrite ? `\nWrote: ${outputPath}` : "\nWrite skipped (writeFile=false).";
+            const contextUsed = projectContext.infoText || projectContext.styleText
+                ? `\nProject context:\n- App type: ${projectContext.appType ?? "unspecified"}\n- Info: ${projectContext.infoSource ?? "none"}\n- Style: ${projectContext.styleSource ?? "none"}`
+                : "\nProject context: (none found in /project)";
+            return {
+                content: [
+                    {
+                        type: "text",
+                        text: `Generated project TODO.${writeText}${contextUsed}\nDerived items: features=${derived.featureCount}, flows=${derived.flowCount}, entities=${derived.entityCount}, routes=${derived.routeCount}\n\nPreview:\n${markdown}`
+                    }
+                ]
+            };
+        }
+        catch (error) {
+            return {
+                content: [
+                    {
+                        type: "text",
+                        text: `Failed to generate project TODO. Error: ${error instanceof Error ? error.message : String(error)}`
+                    }
+                ]
+            };
+        }
+    });
+    server.registerTool("project-preflight", {
+        title: "Project Preflight Checklist",
+        description: "Generate a checklist/quiz from guides + project context. Ensures project/info aligns with required build decisions before instructions are generated.",
+        inputSchema: z.object({
+            projectRoot: z.string().optional().describe("Absolute path to project root (default MCP_PROJECT_ROOT or cwd)"),
+            includeTemplate: z.boolean().optional().describe("Include checklist-aligned project info template (default true)")
+        })
+    }, async (input) => {
+        const parsed = z
+            .object({
+            projectRoot: z.string().optional(),
+            includeTemplate: z.boolean().optional()
+        })
+            .parse(input);
+        const projectRoot = resolveProjectRoot(parsed.projectRoot);
+        const projectContext = await readProjectContext(projectRoot);
+        const checklist = buildChecklistItems(projectContext);
+        const missing = checklist.filter((item) => item.status === "missing");
+        const answered = checklist.filter((item) => item.status === "answered");
+        const proposedDefaults = buildProposedDefaults(projectContext, checklist);
+        const lines = [];
+        lines.push("Project preflight checklist");
+        lines.push(`App type: ${projectContext.appType ?? "unspecified"}`);
+        lines.push(`Context sources: info=${projectContext.infoSource ?? "none"}, style=${projectContext.styleSource ?? "none"}`);
+        lines.push("");
+        lines.push("Answered:");
+        if (answered.length === 0) {
+            lines.push("- (none)");
+        }
+        else {
+            for (const item of answered) {
+                lines.push(`- ${item.title}${item.evidence ? `: ${item.evidence}` : ""}`);
+            }
+        }
+        lines.push("");
+        if (missing.length === 0) {
+            lines.push("Missing items: (none)");
+        }
+        else {
+            lines.push(`Missing items (${missing.length}) - Proposed defaults below:\n`);
+            for (const item of missing) {
+                const defaultValue = proposedDefaults[item.id];
+                const guideRefs = item.guideIds.length ? ` [guides: ${item.guideIds.join(", ")}]` : "";
+                if (defaultValue) {
+                    lines.push(`## ${item.title}`);
+                    lines.push(`Question: ${item.question}`);
+                    lines.push(`✓ Proposed: ${defaultValue}`);
+                    lines.push(`${guideRefs}`);
+                    lines.push("");
+                }
+                else {
+                    const hint = item.answerHint ? ` Hint: ${item.answerHint}` : "";
+                    lines.push(`- ${item.title}: ${item.question}${guideRefs}${hint}`);
+                }
+            }
+            lines.push("");
+            lines.push("---");
+            lines.push("Would you like to proceed with these proposed defaults? If yes:");
+            lines.push("1. Review the proposed values above");
+            lines.push("2. Edit project/info.md to include these answers under the corresponding sections");
+            lines.push("3. Run project-preflight again to validate");
+            lines.push("4. Run generate-project-todo to refresh project/TODO.md");
+            lines.push("5. Run generate-project-instructions to rebuild .github/copilot-instructions.md");
+        }
+        if (parsed.includeTemplate ?? true) {
+            lines.push("");
+            lines.push("---");
+            lines.push("");
+            lines.push("Template for manual edits:");
+            lines.push(buildChecklistTemplate());
+        }
+        return {
+            content: [
+                {
+                    type: "text",
+                    text: lines.join("\n")
+                }
+            ]
+        };
     });
     server.registerTool("list-docs", {
         title: "List Package Docs",
@@ -1022,5 +2115,276 @@ export function registerTools(params) {
             projectRootFallback: process.env.MCP_PROJECT_ROOT ?? process.cwd(),
             guideText
         });
+    });
+    server.registerTool("update-app-naming", {
+        title: "Update App Naming",
+        description: "Update app name across package.json, app.json, public/manifest.webmanifest, and bundle identifiers.",
+        inputSchema: z.object({
+            projectRoot: z.string().optional().describe("Absolute path to project root (default MCP_PROJECT_ROOT or cwd)"),
+            displayName: z.string().describe("Human-readable app name (e.g., 'My App', 'Creatisphere')"),
+            companyDomain: z.string().optional().describe("Company domain for bundle ID (e.g., 'com.yourcompany'; default 'com.example')"),
+            apply: z.boolean().optional().describe("Apply changes to files (default true)")
+        })
+    }, async (input) => {
+        const parsed = z
+            .object({
+            projectRoot: z.string().optional(),
+            displayName: z.string(),
+            companyDomain: z.string().optional(),
+            apply: z.boolean().optional()
+        })
+            .parse(input);
+        const projectRoot = resolveProjectRoot(parsed.projectRoot);
+        const displayName = parsed.displayName;
+        const companyDomain = parsed.companyDomain ?? "com.example";
+        const shouldApply = parsed.apply ?? true;
+        // Derive naming variants
+        const slug = displayName.toLowerCase().replace(/\s+/g, "");
+        const packageName = displayName.toLowerCase().replace(/\s+/g, "-");
+        const scheme = displayName.toLowerCase().replace(/\s+/g, "-");
+        const bundleId = `${companyDomain}.${slug}`;
+        const shortName = displayName.split(" ")[0].substring(0, 12);
+        const updates = [];
+        // Update package.json
+        try {
+            const packageJsonPath = path.join(projectRoot, "package.json");
+            const packageContent = await readFile(packageJsonPath, "utf8");
+            const packageJson = JSON.parse(packageContent);
+            const oldPackageName = packageJson.name;
+            packageJson.name = packageName;
+            const newPackageContent = JSON.stringify(packageJson, null, 2) + "\n";
+            if (shouldApply && oldPackageName !== packageName) {
+                await writeFile(packageJsonPath, newPackageContent, "utf8");
+            }
+            updates.push({
+                file: "package.json",
+                before: `"name": "${oldPackageName}"`,
+                after: `"name": "${packageName}"`,
+                description: "Updated npm package name"
+            });
+        }
+        catch (err) {
+            updates.push({
+                file: "package.json",
+                before: "",
+                after: "",
+                description: `Error: ${err instanceof Error ? err.message : "Unknown error"}`
+            });
+        }
+        // Update app.json
+        try {
+            const appJsonPath = path.join(projectRoot, "app.json");
+            const appContent = await readFile(appJsonPath, "utf8");
+            const appJson = JSON.parse(appContent);
+            const oldName = appJson.expo?.name;
+            const oldSlug = appJson.expo?.slug;
+            const oldScheme = appJson.expo?.scheme;
+            const oldIosBundleId = appJson.expo?.ios?.bundleIdentifier;
+            const oldAndroidPackage = appJson.expo?.android?.package;
+            if (!appJson.expo)
+                appJson.expo = {};
+            appJson.expo.name = displayName;
+            appJson.expo.slug = slug;
+            appJson.expo.scheme = scheme;
+            if (!appJson.expo.ios)
+                appJson.expo.ios = {};
+            appJson.expo.ios.bundleIdentifier = bundleId;
+            if (!appJson.expo.android)
+                appJson.expo.android = {};
+            appJson.expo.android.package = bundleId;
+            const newAppContent = JSON.stringify(appJson, null, 2) + "\n";
+            if (shouldApply) {
+                await writeFile(appJsonPath, newAppContent, "utf8");
+            }
+            updates.push({
+                file: "app.json (expo.name)",
+                before: oldName ?? "(not set)",
+                after: displayName,
+                description: "Updated app display name"
+            });
+            updates.push({
+                file: "app.json (expo.slug)",
+                before: oldSlug ?? "(not set)",
+                after: slug,
+                description: "Updated app slug"
+            });
+            updates.push({
+                file: "app.json (expo.scheme)",
+                before: oldScheme ?? "(not set)",
+                after: scheme,
+                description: "Updated deep link scheme"
+            });
+            updates.push({
+                file: "app.json (ios.bundleIdentifier)",
+                before: oldIosBundleId ?? "(not set)",
+                after: bundleId,
+                description: "Updated iOS bundle identifier"
+            });
+            updates.push({
+                file: "app.json (android.package)",
+                before: oldAndroidPackage ?? "(not set)",
+                after: bundleId,
+                description: "Updated Android package"
+            });
+        }
+        catch (err) {
+            updates.push({
+                file: "app.json",
+                before: "",
+                after: "",
+                description: `Error: ${err instanceof Error ? err.message : "Unknown error"}`
+            });
+        }
+        // Update public/manifest.webmanifest
+        try {
+            const manifestPath = path.join(projectRoot, "public", "manifest.webmanifest");
+            const manifestContent = await readFile(manifestPath, "utf8");
+            const manifest = JSON.parse(manifestContent);
+            const oldManifestName = manifest.name;
+            const oldManifestShortName = manifest.short_name;
+            manifest.name = displayName;
+            manifest.short_name = shortName;
+            const newManifestContent = JSON.stringify(manifest, null, 2) + "\n";
+            if (shouldApply) {
+                await writeFile(manifestPath, newManifestContent, "utf8");
+            }
+            updates.push({
+                file: "public/manifest.webmanifest (name)",
+                before: oldManifestName ?? "(not set)",
+                after: displayName,
+                description: "Updated PWA manifest name"
+            });
+            updates.push({
+                file: "public/manifest.webmanifest (short_name)",
+                before: oldManifestShortName ?? "(not set)",
+                after: shortName,
+                description: "Updated PWA short name"
+            });
+        }
+        catch (err) {
+            updates.push({
+                file: "public/manifest.webmanifest",
+                before: "",
+                after: "",
+                description: `Error: ${err instanceof Error ? err.message : "Unknown error"}`
+            });
+        }
+        const summary = updates
+            .map((u) => `${u.file}:\n  Before: ${u.before}\n  After: ${u.after}\n  (${u.description})`)
+            .join("\n\n");
+        return {
+            content: [
+                {
+                    type: "text",
+                    text: `App Naming Update ${shouldApply ? "Applied" : "(Dry-run)"}\n\nDisplay Name: ${displayName}\nSlug: ${slug}\nPackage: ${packageName}\nScheme: ${scheme}\nBundle ID: ${bundleId}\nShort Name: ${shortName}\n\nChanges:\n${summary}`
+                }
+            ]
+        };
+    });
+    server.registerTool("update-readme", {
+        title: "Update README",
+        description: "Generate or revise README.md based on project info and style context.",
+        inputSchema: z.object({
+            projectRoot: z.string().optional().describe("Absolute path to project root (default MCP_PROJECT_ROOT or cwd)"),
+            apply: z.boolean().optional().describe("Apply changes to README.md (default true)")
+        })
+    }, async (input) => {
+        const parsed = z
+            .object({
+            projectRoot: z.string().optional(),
+            apply: z.boolean().optional()
+        })
+            .parse(input);
+        const projectRoot = resolveProjectRoot(parsed.projectRoot);
+        const shouldApply = parsed.apply ?? true;
+        // Read project context files
+        const infoPaths = [
+            path.join(projectRoot, "project", "info.md"),
+            path.join(projectRoot, "project", "info.txt")
+        ];
+        const stylePaths = [
+            path.join(projectRoot, "project", "style.md"),
+            path.join(projectRoot, "project", "style.txt")
+        ];
+        const appJsonPath = path.join(projectRoot, "app.json");
+        let infoText = "";
+        for (const filePath of infoPaths) {
+            try {
+                infoText = await readFile(filePath, "utf8");
+                break;
+            }
+            catch {
+                // Continue to next path
+            }
+        }
+        let styleText = "";
+        for (const filePath of stylePaths) {
+            try {
+                styleText = await readFile(filePath, "utf8");
+                break;
+            }
+            catch {
+                // Continue to next path
+            }
+        }
+        let appName = "My App";
+        try {
+            const appContent = await readFile(appJsonPath, "utf8");
+            const appJson = JSON.parse(appContent);
+            appName = appJson.expo?.name ?? appName;
+        }
+        catch {
+            // Use default
+        }
+        // Generate README content
+        const readmeLines = [
+            `# ${appName}`,
+            ""
+        ];
+        if (infoText) {
+            readmeLines.push("## About");
+            readmeLines.push("");
+            readmeLines.push(infoText.replace(/^#+\s+/gm, "").trim());
+            readmeLines.push("");
+        }
+        if (styleText) {
+            readmeLines.push("## Style & Design");
+            readmeLines.push("");
+            readmeLines.push(styleText.replace(/^#+\s+/gm, "").trim());
+            readmeLines.push("");
+        }
+        if (!infoText && !styleText) {
+            readmeLines.push("## Getting Started");
+            readmeLines.push("");
+            readmeLines.push("This project is built with Expo Router and React Native.");
+            readmeLines.push("");
+        }
+        readmeLines.push("## Development");
+        readmeLines.push("");
+        readmeLines.push("```bash");
+        readmeLines.push("npm install");
+        readmeLines.push("npm start");
+        readmeLines.push("```");
+        readmeLines.push("");
+        const readmeContent = readmeLines.join("\n");
+        const readmePath = path.join(projectRoot, "README.md");
+        let oldReadmeContent = "(README does not exist yet)";
+        try {
+            oldReadmeContent = await readFile(readmePath, "utf8");
+        }
+        catch {
+            // File doesn't exist, use default message
+        }
+        if (shouldApply) {
+            await writeFile(readmePath, readmeContent, "utf8");
+        }
+        return {
+            content: [
+                {
+                    type: "text",
+                    text: `README.md ${shouldApply ? "Updated" : "(Dry-run)"}\n\nGenerated from:\n- Project Info: ${infoText ? "Found" : "Not found"}\n- Project Style: ${styleText ? "Found" : "Not found"}\n- App Name: ${appName}\n\nNew README:\n${readmeContent}`
+                }
+            ]
+        };
     });
 }
