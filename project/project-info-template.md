@@ -75,6 +75,43 @@
 - **Migrations:** [How schema is managed]
 - **File Storage:** [S3 / Cloudinary / Supabase Storage / None]
 
+### Ads & Monetization (choose one)
+- **[ ] No Ads** - Premium/freemium model, no advertising
+- **[ ] David's Portfolio Ads** - Offline-first sponsored content from David's portfolio projects
+- **[ ] David's Ads + External Networks** - Combined approach with portfolio ads and external ad networks
+- **[ ] External Ad Networks Only** - AdMob, AdSense, Facebook Ads, etc.
+
+### David's Portfolio Ads Configuration (if using this option)
+- **Offline-First Caching:** [✅ Cache ads locally for offline access]
+- **Ad Fetch Interval:** [Daily / Weekly / On app start]
+- **Ad Service Endpoint:** [https://davids-api.com/api/ads / custom]
+- **Ad Placement Strategy:**
+  - Home screen banner: [yes/no]
+  - Between content items: [yes/no]
+  - Modal on app open: [yes/no - with frequency cap]
+  - Other placements: [describe]
+- **Ad Click Tracking:** [Analytics events to track]
+- **Fallback Content:** [What to show if no ads available]
+- **Privacy Policy:** [Link to privacy policy mentioning sponsored content]
+
+### External Ad Networks Configuration (if using this option)
+- **Ad Networks:** [AdMob / AdSense / Facebook Audience Network / Other]
+- **Ad Unit IDs:**
+  - Banner: [ca-app-pub-XXXXXX]
+  - Interstitial: [ca-app-pub-XXXXXX]
+  - Rewarded: [ca-app-pub-XXXXXX]
+  - Native: [ca-app-pub-XXXXXX]
+- **Ad Placement Strategy:**
+  - Banner ads: [Locations]
+  - Interstitial ads: [Frequency and triggers]
+  - Rewarded ads: [Incentives offered]
+  - Native ads: [Integration points]
+- **GDPR Consent:** [Consent management platform or custom]
+- **COPPA Compliance:** [If app targets children under 13]
+- **Test Device IDs:** [For development testing]
+- **Ad Mediation:** [If using multiple networks]
+- **Implementation Guide:** See ads.md
+
 ### API Authentication & Security (if using any backend)
 - **Authentication Method:** [JWT / Session / API Key / OAuth / None]
 - **Authorization:** [Role-based / Permission-based / Public]

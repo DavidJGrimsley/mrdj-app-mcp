@@ -20,5 +20,6 @@ These guides now reflect DJsPortfolio conventions (Expo Router + Uniwind, `manif
 - [offlineFirst.md](offlineFirst.md) — Offline-first architecture, sync strategies, conflict resolution.
 - [typeCheckAndLint.md](typeCheckAndLint.md) — TypeScript setup, ESLint config, pre-commit hooks.
 - [backendBestPractices.md](backendBestPractices.md) — API design, error handling, validation, security.
+- [ads.md](ads.md) — Monetization strategies (no ads, sponsored content, ad networks), privacy compliance, offline-first ad caching.
 
 If you add a new guide, link it here so this page stays the entry point for best practices.

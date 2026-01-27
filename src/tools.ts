@@ -851,6 +851,13 @@ function buildChecklistTemplate(): string {
     "",
     "## Compliance / Security",
     "- Any compliance or security constraints:",
+    "",
+    "## Ads & Monetization",
+    "- Monetization strategy: no ads | david's ads | david's + external | external ads",
+    "- Ad network (if using external): AdMob | AdSense | Facebook Ads | other",
+    "- David's Portfolio Ads enabled? (yes/no)",
+    "- Offline-first ad caching? (yes/no)",
+    "- Ad placement strategy:",
     ""
   ].join("\n");
 }
@@ -957,6 +964,14 @@ function buildChecklistItems(context: ProjectContext): ChecklistItem[] {
       guideIds: ["plesk-api-routes-deploy", "plesk-deployment", "backend-best-practices"],
       status: hasText(/\bno backend|expo.*api.*route|\+api\.ts|server output|external api|api subdomain|api\..*\.com/i) ? "answered" : "missing",
       answerHint: "Choose ONE: (1) No backend - use external services like Supabase/Firebase, (2) Expo API routes - +api.ts files with expo.web.output='server', or (3) External API - standalone server on subdomain."
+    },
+    {
+      id: "ads-monetization",
+      title: "Ads & Monetization",
+      question: "What monetization strategy? No ads / David's Portfolio Ads / David's + External / External ad networks only?",
+      guideIds: ["ads"],
+      status: hasText(/\bno ads|david'?s.*ads|portfolio ads|admob|adsense|facebook ads|external ads|ad network|monetization|sponsored content/i) ? "answered" : "missing",
+      answerHint: "Choose ONE: (1) No ads - premium/freemium model, (2) David's Portfolio Ads - offline-first sponsored content, (3) David's Ads + External Networks - combined approach, or (4) External Ad Networks - AdMob, AdSense, etc."
     }
   ];
 
@@ -1711,6 +1726,18 @@ function buildPleskApiDeploymentChecklist(context: ProjectContext): {
     backendPattern = "expo-api-routes";
   } else if (hasText(/external api|api subdomain|api\.|standalone.*api/i)) {
     backendPattern = "external-api";
+  }
+  
+  // Detect ads/monetization pattern
+  let adsPattern: "none" | "davids-ads" | "davids-plus-external" | "external-only" | "unknown" = "unknown";
+  if (hasText(/no ads|premium|freemium|subscription.*only|ad[- ]?free/i) && !hasText(/david'?s.*ads|admob|adsense/i)) {
+    adsPattern = "none";
+  } else if (hasText(/david'?s.*portfolio.*ads|portfolio.*sponsored|offline.*ad.*cach/i) && !hasText(/admob|adsense|facebook.*ads/i)) {
+    adsPattern = "davids-ads";
+  } else if (hasText(/david'?s.*ads/i) && hasText(/admob|adsense|facebook.*ads|external.*ad/i)) {
+    adsPattern = "davids-plus-external";
+  } else if (hasText(/admob|adsense|facebook.*ads|external.*ad.*network/i) && !hasText(/david'?s.*ads/i)) {
+    adsPattern = "external-only";
   }
   
   const checklist: Array<{ id: string; title: string; status: "complete" | "incomplete" | "n/a"; details: string }> = [
@@ -3104,6 +3131,109 @@ export function registerTools(params: {
           {
             type: "text",
             text: `README.md ${shouldApply ? "Updated" : "(Dry-run)"}\n\nGenerated from:\n- Project Info: ${infoText ? "Found" : "Not found"}\n- Project Style: ${styleText ? "Found" : "Not found"}\n- App Name: ${appName}\n\nNew README:\n${readmeContent}`
+          }
+        ]
+      };
+    }
+  );
+
+  server.registerTool(
+    "copy-ads-code",
+    {
+      title: "Copy Ads Implementation",
+      description: "Copy David's Portfolio Ads reference implementation from code/ads/ into the project. Includes adsService.ts and Ad components (AdBanner, AdBannerWithModal, AdInfoModal, AdModal).",
+      inputSchema: z.object({
+        projectRoot: z.string().optional().describe("Absolute path to project root (default MCP_PROJECT_ROOT or cwd)"),
+        targetDir: z.string().optional().describe("Target directory within project (default: src/services/ads)"),
+        apply: z.boolean().optional().describe("Apply changes to files (default true)")
+      })
+    },
+    async (input: unknown) => {
+      const parsed = z
+        .object({
+          projectRoot: z.string().optional(),
+          targetDir: z.string().optional(),
+          apply: z.boolean().optional()
+        })
+        .parse(input);
+
+      const projectRoot = resolveProjectRoot(parsed.projectRoot);
+      const targetDir = parsed.targetDir ?? "src/services/ads";
+      const shouldApply = parsed.apply ?? true;
+
+      // MCP code folder path
+      const mcpCodeDir = path.join(__dirname, "..", "code", "ads");
+      
+      // Ensure MCP code folder exists
+      try {
+        await access(mcpCodeDir);
+      } catch {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Error: MCP ads code folder not found at ${mcpCodeDir}\nExpected reference implementation files are missing.`
+            }
+          ]
+        };
+      }
+
+      const targetPath = path.join(projectRoot, targetDir);
+      ensurePathInsideRoot(projectRoot, targetPath);
+
+      // Files to copy
+      const filesToCopy = [
+        "adsService.ts",
+        "Ads/AdBanner.tsx",
+        "Ads/AdBannerWithModal.tsx",
+        "Ads/AdInfoModal.tsx",
+        "Ads/AdModal.tsx",
+        "Ads/index.ts"
+      ];
+
+      const results: string[] = [];
+      let copiedCount = 0;
+      let errorCount = 0;
+
+      for (const file of filesToCopy) {
+        const sourcePath = path.join(mcpCodeDir, file);
+        const destPath = path.join(targetPath, file);
+
+        try {
+          const content = await readFile(sourcePath, "utf8");
+          
+          if (shouldApply) {
+            await mkdir(path.dirname(destPath), { recursive: true });
+            await writeFile(destPath, content, "utf8");
+          }
+
+          copiedCount++;
+          results.push(`✓ ${file} → ${path.relative(projectRoot, destPath)}`);
+        } catch (error) {
+          errorCount++;
+          results.push(`✗ ${file} - Error: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
+
+      const summary = shouldApply
+        ? `Copied ${copiedCount} file(s) to ${targetDir}`
+        : `Dry-run: Would copy ${copiedCount} file(s) to ${targetDir}`;
+
+      const nextSteps = [
+        "",
+        "Next steps:",
+        "1. Import adsService in your app: import { adsService } from '@/src/services/ads/adsService';",
+        "2. Initialize ads on app start: await adsService.initialize();",
+        "3. Use Ad components: import { AdBanner } from '@/src/services/ads/Ads';",
+        "4. Set EXPO_PUBLIC_ADS_API_URL in .env for production API",
+        "5. See ads.md guide for full setup instructions"
+      ];
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `${summary}\n${errorCount > 0 ? `Errors: ${errorCount}\n` : ""}\n${results.join("\n")}${nextSteps.join("\n")}`
           }
         ]
       };
