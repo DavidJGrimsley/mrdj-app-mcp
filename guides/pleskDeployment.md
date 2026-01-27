@@ -16,7 +16,7 @@ _Disclaimer: Plesk is serving the **static web export** of the Expo app, not run
 - API routes live on same domain as app (e.g., `pokepages.app/api/content`)
 
 ### 3. External API (Subdomain)
-- Standalone Node.js or Python API on subdomain (e.g., `api.pokepages.app`)
+- Standalone Node.js or Python API on subdomain (e.g., `api.pokepages.app`) [or same domain (e.g., `pokepages.app/api/content`) if configures in nginx additional directives but this document doesn't cover that]
 - Front-end is static export on main domain
 - API built and deployed separately
 - This document covers this pattern below
