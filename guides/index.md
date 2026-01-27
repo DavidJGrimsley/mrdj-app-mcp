@@ -15,5 +15,10 @@ These guides now reflect DJsPortfolio conventions (Expo Router + Uniwind, `manif
 - [pwa.md](pwa.md) — Progressive Web App setup, manifest, service worker, auto-updates, theme-color.
 - [buildScripts.md](buildScripts.md) — Local build/export scripts, sitemap generation, API server build.
 - [pleskDeployment.md](pleskDeployment.md) — How we deploy static web builds and the API on Plesk.
+- [pleskApiRoutesDeploy.md](pleskApiRoutesDeploy.md) — **Expo Router API routes deployment to Plesk (server output mode).**
+- [metaTags.md](metaTags.md) — SEO, Open Graph, Twitter Cards, dynamic meta tags.
+- [offlineFirst.md](offlineFirst.md) — Offline-first architecture, sync strategies, conflict resolution.
+- [typeCheckAndLint.md](typeCheckAndLint.md) — TypeScript setup, ESLint config, pre-commit hooks.
+- [backendBestPractices.md](backendBestPractices.md) — API design, error handling, validation, security.
 
 If you add a new guide, link it here so this page stays the entry point for best practices.

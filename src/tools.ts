@@ -945,10 +945,18 @@ function buildChecklistItems(context: ProjectContext): ChecklistItem[] {
     {
       id: "deployment",
       title: "Deployment & hosting",
-      question: "Where will it be hosted/deployed?",
-      guideIds: ["plesk-deployment", "build-scripts"],
-      status: hasText(/\bdeploy|deployment|hosting|plesk|nginx|pm2|build\b|ci\b|cdn\b/i) ? "answered" : "missing",
-      answerHint: "Plesk/NGINX, Vercel, EAS, etc."
+      question: "Where will it be hosted/deployed? What backend pattern: no backend, Expo API routes, or external API?",
+      guideIds: ["plesk-deployment", "plesk-api-routes-deploy", "build-scripts"],
+      status: hasText(/\bdeploy|deployment|hosting|plesk|nginx|pm2|build\b|ci\b|cdn\b|api route|server output|no backend|external api/i) ? "answered" : "missing",
+      answerHint: "Specify: Plesk/Vercel/EAS/etc. AND backend pattern: (1) No backend - static only, (2) Expo API routes - same domain with server output, or (3) External API - subdomain with standalone server."
+    },
+    {
+      id: "api-backend",
+      title: "Backend/API architecture",
+      question: "Which backend pattern? No backend / Expo Router API routes / External API on subdomain?",
+      guideIds: ["plesk-api-routes-deploy", "plesk-deployment", "backend-best-practices"],
+      status: hasText(/\bno backend|expo.*api.*route|\+api\.ts|server output|external api|api subdomain|api\..*\.com/i) ? "answered" : "missing",
+      answerHint: "Choose ONE: (1) No backend - use external services like Supabase/Firebase, (2) Expo API routes - +api.ts files with expo.web.output='server', or (3) External API - standalone server on subdomain."
     }
   ];
 
@@ -1623,6 +1631,177 @@ async function buildProjectInstructions(params: {
   };
 }
 
+function validateProjectInfo(markdown: string): { missingSections: string[]; incompleteSections: string[] } {
+  const requiredSections = [
+    "App Name",
+    "Overview",
+    "User Types",
+    "Features",
+    "Deployment"
+  ];
+  
+  const missingSections: string[] = [];
+  const incompleteSections: string[] = [];
+  
+  for (const section of requiredSections) {
+    const regex = new RegExp(`## ${section}`, "i");
+    if (!regex.test(markdown)) {
+      missingSections.push(section);
+    } else {
+      // Check if section has content (not just placeholder text)
+      const sectionRegex = new RegExp(`## ${section}[\\s\\S]*?(?=## |$)`, "i");
+      const sectionMatch = markdown.match(sectionRegex);
+      if (sectionMatch) {
+        const content = sectionMatch[0];
+        if (/\[.*?\]|TODO|TBD|specify|your-|example/i.test(content)) {
+          incompleteSections.push(section);
+        }
+      }
+    }
+  }
+  
+  return { missingSections, incompleteSections };
+}
+
+function validateProjectStyle(markdown: string): { missingSections: string[]; incompleteSections: string[] } {
+  const requiredSections = [
+    "Fonts",
+    "Colors"
+  ];
+  
+  const missingSections: string[] = [];
+  const incompleteSections: string[] = [];
+  
+  for (const section of requiredSections) {
+    const regex = new RegExp(`## ${section}`, "i");
+    if (!regex.test(markdown)) {
+      missingSections.push(section);
+    } else {
+      const sectionRegex = new RegExp(`## ${section}[\\s\\S]*?(?=## |$)`, "i");
+      const sectionMatch = markdown.match(sectionRegex);
+      if (sectionMatch) {
+        const content = sectionMatch[0];
+        if (/\[.*?\]|TODO|TBD|specify/i.test(content)) {
+          incompleteSections.push(section);
+        }
+      }
+    }
+  }
+  
+  return { missingSections, incompleteSections };
+}
+
+function buildPleskApiDeploymentChecklist(context: ProjectContext): {
+  checklist: Array<{ id: string; title: string; status: "complete" | "incomplete" | "n/a"; details: string }>;
+  readyToDeploy: boolean;
+  criticalIssues: string[];
+  backendPattern: "none" | "expo-api-routes" | "external-api" | "unknown";
+} {
+  const combined = [context.infoText, context.styleText].filter(Boolean).join("\n\n");
+  const lower = combined.toLowerCase();
+  const hasText = (pattern: RegExp) => pattern.test(lower);
+  
+  const criticalIssues: string[] = [];
+  
+  // Detect backend pattern
+  let backendPattern: "none" | "expo-api-routes" | "external-api" | "unknown" = "unknown";
+  if (hasText(/no backend|static only|external service|supabase|firebase/i) && !hasText(/\+api\.ts|expo.*api.*route/i)) {
+    backendPattern = "none";
+  } else if (hasText(/expo.*api.*route|\+api\.ts|server output/i)) {
+    backendPattern = "expo-api-routes";
+  } else if (hasText(/external api|api subdomain|api\.|standalone.*api/i)) {
+    backendPattern = "external-api";
+  }
+  
+  const checklist: Array<{ id: string; title: string; status: "complete" | "incomplete" | "n/a"; details: string }> = [
+    {
+      id: "backend-pattern",
+      title: "Backend pattern specified",
+      status: backendPattern !== "unknown" ? "complete" as const : "incomplete" as const,
+      details: `Detected: ${backendPattern}. Should specify: No backend / Expo API routes / External API`
+    },
+    {
+      id: "web-output-server",
+      title: "app.json web output set to 'server'",
+      status: backendPattern === "expo-api-routes" 
+        ? (hasText(/expo\.web\.output.*server|web.*output.*server/i) ? "complete" as const : "incomplete" as const)
+        : "n/a" as const,
+      details: "Required for Expo Router API routes. Set expo.web.output = 'server' in app.json"
+    },
+    {
+      id: "api-routes-exist",
+      title: "API routes (+api.ts files) present",
+      status: backendPattern === "expo-api-routes"
+        ? (hasText(/\+api\.ts|api route/i) ? "complete" as const : "incomplete" as const)
+        : "n/a" as const,
+      details: "Check if project has +api.ts files in app directory"
+    },
+    {
+      id: "server-js-correct",
+      title: "server.js uses Express wildcard '*' pattern",
+      status: backendPattern === "expo-api-routes"
+        ? (hasText(/app\.all\(['"]?\*['"]?/i) ? "complete" as const : "incomplete" as const)
+        : "n/a" as const,
+      details: "server.js must use app.all('*', ...) NOT app.all('/{*all}', ...)"
+    },
+    {
+      id: "dependencies",
+      title: "Required dependencies installed",
+      status: backendPattern === "expo-api-routes"
+        ? (hasText(/express|expo-server|compression|morgan/i) ? "complete" as const : "incomplete" as const)
+        : "n/a" as const,
+      details: "Need: express, expo-server, compression, morgan in package.json"
+    },
+    {
+      id: "build-artifacts",
+      title: "Build produces dist/client and dist/server folders",
+      status: backendPattern === "expo-api-routes" ? "incomplete" as const : "n/a" as const,
+      details: "Run 'npx expo export -p web' and verify dist/client/ and dist/server/ exist"
+    },
+    {
+      id: "external-api-subdomain",
+      title: "External API subdomain configured",
+      status: backendPattern === "external-api"
+        ? (hasText(/api\.|api subdomain/i) ? "complete" as const : "incomplete" as const)
+        : "n/a" as const,
+      details: "External API should be on subdomain (e.g., api.domain.com). See pleskDeployment.md"
+    },
+    {
+      id: "plesk-config",
+      title: "Plesk Node.js settings configured",
+      status: backendPattern === "expo-api-routes" ? "incomplete" as const : "n/a" as const,
+      details: "Document Root: /dist/client, Application Root: /, Startup File: server.js, NODE_ENV=production"
+    },
+    {
+      id: "domain-configured",
+      title: "Domain/hosting details specified",
+      status: hasText(/domain|hosting|plesk.*domain/i) ? "complete" as const : "incomplete" as const,
+      details: "Specify target domain and hosting service in project info"
+    }
+  ];
+  
+  // Collect critical issues
+  if (backendPattern === "unknown") {
+    criticalIssues.push("⚠️ Backend pattern not specified. Choose: No backend / Expo API routes / External API");
+  }
+  
+  if (backendPattern === "expo-api-routes") {
+    if (checklist.find(i => i.id === "web-output-server")?.status === "incomplete") {
+      criticalIssues.push("⚠️ CRITICAL: app.json must have expo.web.output = 'server' for Expo API routes");
+    }
+    if (checklist.find(i => i.id === "server-js-correct")?.status === "incomplete") {
+      criticalIssues.push("⚠️ CRITICAL: server.js must use Express wildcard '*' pattern, not Expo Router syntax");
+    }
+    if (checklist.find(i => i.id === "dependencies")?.status === "incomplete") {
+      criticalIssues.push("⚠️ Missing required dependencies: express, expo-server, compression, morgan");
+    }
+  }
+  
+  const readyToDeploy = checklist.filter(item => item.status === "incomplete").length === 0;
+  
+  return { checklist, readyToDeploy, criticalIssues, backendPattern };
+}
+
 export function registerTools(params: {
   server: McpServer;
   guides: GuideSpec[];
@@ -1635,13 +1814,14 @@ export function registerTools(params: {
     "ingest-project-context",
     {
       title: "Ingest Project Context",
-      description: "Convert project/info.txt + project/style.txt into markdown in /project and optionally delete the .txt files.",
+      description: "Convert project/info.txt + project/style.txt into markdown in /project, validate against template, and optionally delete the .txt files. Also reads and validates existing .md files.",
       inputSchema: z.object({
         projectRoot: z.string().optional().describe("Absolute path to project root (default MCP_PROJECT_ROOT or cwd)"),
-        infoPath: z.string().optional().describe("Path to project info.txt (default project/info.txt)"),
-        stylePath: z.string().optional().describe("Path to project style.txt (default project/style.txt)"),
+        infoPath: z.string().optional().describe("Path to project info (default: checks .md first, then .txt)"),
+        stylePath: z.string().optional().describe("Path to project style (default: checks .md first, then .txt)"),
         writeFile: z.boolean().optional().describe("Write the output files (default true)"),
-        deleteTxt: z.boolean().optional().describe("Delete source .txt files after conversion (default true)")
+        deleteTxt: z.boolean().optional().describe("Delete source .txt files after conversion (default true)"),
+        validateTemplate: z.boolean().optional().describe("Validate against project templates and report missing sections (default true)")
       })
     },
     async (input: unknown) => {
@@ -1651,37 +1831,82 @@ export function registerTools(params: {
           infoPath: z.string().optional(),
           stylePath: z.string().optional(),
           writeFile: z.boolean().optional(),
-          deleteTxt: z.boolean().optional()
+          deleteTxt: z.boolean().optional(),
+          validateTemplate: z.boolean().optional()
         })
         .parse(input);
 
       const projectRoot = resolveProjectRoot(parsed.projectRoot);
-      const infoTxtPath = path.isAbsolute(parsed.infoPath ?? "")
-        ? (parsed.infoPath as string)
-        : path.join(projectRoot, parsed.infoPath ?? path.join("project", "info.txt"));
-      const styleTxtPath = path.isAbsolute(parsed.stylePath ?? "")
-        ? (parsed.stylePath as string)
-        : path.join(projectRoot, parsed.stylePath ?? path.join("project", "style.txt"));
+      const shouldValidate = parsed.validateTemplate ?? true;
+      
+      // Check for .md files first, then .txt files
+      const infoMdPath = path.join(projectRoot, "project", "info.md");
+      const styleMdPath = path.join(projectRoot, "project", "style.md");
+      const infoTxtPath = path.join(projectRoot, "project", "info.txt");
+      const styleTxtPath = path.join(projectRoot, "project", "style.txt");
 
-      const infoTxt = await readOptionalFile(infoTxtPath);
-      const styleTxt = await readOptionalFile(styleTxtPath);
+      let infoContent = await readOptionalFile(infoMdPath);
+      let styleContent = await readOptionalFile(styleMdPath);
+      let infoSource = infoContent ? infoMdPath : "";
+      let styleSource = styleContent ? styleMdPath : "";
+      
+      // Fall back to .txt if .md doesn't exist
+      if (!infoContent) {
+        infoContent = await readOptionalFile(infoTxtPath);
+        infoSource = infoContent ? infoTxtPath : "";
+      }
+      if (!styleContent) {
+        styleContent = await readOptionalFile(styleTxtPath);
+        styleSource = styleContent ? styleTxtPath : "";
+      }
 
-      if (!infoTxt && !styleTxt) {
+      if (!infoContent && !styleContent) {
         return {
           content: [
             {
               type: "text",
-              text: "No project info/style .txt files found. Expected project/info.txt and/or project/style.txt."
+              text: "No project info/style files found. Expected project/info.md (.txt) and/or project/style.md (.txt)."
             }
           ]
         };
       }
 
-      const infoMdPath = path.join(projectRoot, "project", "info.md");
-      const styleMdPath = path.join(projectRoot, "project", "style.md");
+      // Convert .txt to markdown if needed
+      const infoMarkdown = infoContent && infoSource.endsWith(".txt") ? reformatProjectInfo(infoContent) : infoContent;
+      const styleMarkdown = styleContent && styleSource.endsWith(".txt") ? reformatProjectStyle(styleContent) : styleContent;
 
-      const infoMarkdown = infoTxt ? reformatProjectInfo(infoTxt) : undefined;
-      const styleMarkdown = styleTxt ? reformatProjectStyle(styleTxt) : undefined;
+      // Validate against templates
+      const validationResults: string[] = [];
+      if (shouldValidate) {
+        if (infoMarkdown) {
+          const infoValidation = validateProjectInfo(infoMarkdown);
+          if (infoValidation.missingSections.length > 0 || infoValidation.incompleteSections.length > 0) {
+            validationResults.push("\\n⚠️ Project Info Validation:");
+            if (infoValidation.missingSections.length > 0) {
+              validationResults.push(`  Missing sections: ${infoValidation.missingSections.join(", ")}`);
+            }
+            if (infoValidation.incompleteSections.length > 0) {
+              validationResults.push(`  Incomplete sections: ${infoValidation.incompleteSections.join(", ")}`);
+            }
+          } else {
+            validationResults.push("✓ Project Info: Complete");
+          }
+        }
+        if (styleMarkdown) {
+          const styleValidation = validateProjectStyle(styleMarkdown);
+          if (styleValidation.missingSections.length > 0 || styleValidation.incompleteSections.length > 0) {
+            validationResults.push("\\n⚠️ Project Style Validation:");
+            if (styleValidation.missingSections.length > 0) {
+              validationResults.push(`  Missing sections: ${styleValidation.missingSections.join(", ")}`);
+            }
+            if (styleValidation.incompleteSections.length > 0) {
+              validationResults.push(`  Incomplete sections: ${styleValidation.incompleteSections.join(", ")}`);
+            }
+          } else {
+            validationResults.push("✓ Project Style: Complete");
+          }
+        }
+      }
 
       const shouldWrite = parsed.writeFile ?? true;
       const shouldDelete = parsed.deleteTxt ?? true;
@@ -1692,17 +1917,17 @@ export function registerTools(params: {
         if (styleMarkdown) await writeFile(styleMdPath, styleMarkdown, "utf8");
       }
 
-      if (shouldDelete) {
-        if (infoTxt) {
+      if (shouldDelete && !infoSource.endsWith(".md") && !styleSource.endsWith(".md")) {
+        if (infoContent && infoSource.endsWith(".txt")) {
           try {
-            await unlink(infoTxtPath);
+            await unlink(infoSource);
           } catch {
             // ignore delete errors
           }
         }
-        if (styleTxt) {
+        if (styleContent && styleSource.endsWith(".txt")) {
           try {
-            await unlink(styleTxtPath);
+            await unlink(styleSource);
           } catch {
             // ignore delete errors
           }
@@ -1711,17 +1936,18 @@ export function registerTools(params: {
 
       const resultLines = [
         "Project context ingestion complete.",
-        `Info source: ${infoTxt ? infoTxtPath : "(none)"}`,
-        `Style source: ${styleTxt ? styleTxtPath : "(none)"}`,
+        `Info source: ${infoSource || "(none)"}`,
+        `Style source: ${styleSource || "(none)"}`,
         shouldWrite ? `Wrote: ${[infoMarkdown ? infoMdPath : null, styleMarkdown ? styleMdPath : null].filter(Boolean).join(", ")}` : "Write skipped (writeFile=false).",
-        shouldDelete ? "Deleted source .txt files." : "Source .txt files retained."
+        shouldDelete ? "Deleted source .txt files (if any)." : "Source files retained.",
+        ...validationResults
       ];
 
       return {
         content: [
           {
             type: "text",
-            text: resultLines.join("\n")
+            text: resultLines.join("\\n")
           }
         ]
       };
@@ -2032,6 +2258,190 @@ export function registerTools(params: {
           {
             type: "text",
             text: lines.join("\n")
+          }
+        ]
+      };
+    }
+  );
+
+  server.registerTool(
+    "prepare-plesk-deployment",
+    {
+      title: "Prepare Plesk Deployment",
+      description: "Generate a comprehensive deployment checklist and guide based on backend pattern: No backend (static only), Expo Router API routes (server output), or External API (subdomain). Validates project configuration and provides pattern-specific deployment instructions.",
+      inputSchema: z.object({
+        projectRoot: z.string().optional().describe("Absolute path to project root (default MCP_PROJECT_ROOT or cwd)")
+      })
+    },
+    async (input: unknown) => {
+      const parsed = z
+        .object({
+          projectRoot: z.string().optional()
+        })
+        .parse(input);
+
+      const projectRoot = resolveProjectRoot(parsed.projectRoot);
+      const projectContext = await readProjectContext(projectRoot);
+      
+      const { checklist, readyToDeploy, criticalIssues, backendPattern } = buildPleskApiDeploymentChecklist(projectContext);
+      
+      const lines: string[] = [];
+      lines.push("# Plesk Deployment Preparation\\n");
+      lines.push(`Project: ${projectContext.appType ?? "unspecified"}`);
+      lines.push(`Backend Pattern: **${backendPattern}**\\n`);
+      
+      if (backendPattern === "unknown") {
+        lines.push("## ⚠️ Backend Pattern Not Specified\\n");
+        lines.push("You must choose ONE of these backend patterns:\\n");
+        lines.push("### 1. No Backend (Static Only)");
+        lines.push("- Use external services: Supabase, Firebase, third-party APIs");
+        lines.push("- Build: \\`npx expo export -p web\\` with \\`expo.web.output = 'static'\\`");
+        lines.push("- Deploy: Upload dist/ to /httpdocs");
+        lines.push("- **Guide:** pleskDeployment.md (Static Web section)\\n");
+        
+        lines.push("### 2. Expo Router API Routes (Same Domain)");
+        lines.push("- API routes in your Expo app (+api.ts files)");
+        lines.push("- Build: \\`npx expo export -p web\\` with \\`expo.web.output = 'server'\\`");
+        lines.push("- Deploy: server.js + dist/ to Application Root");
+        lines.push("- **Guide:** pleskApiRoutesDeploy.md\\n");
+        
+        lines.push("### 3. External API (Subdomain)");
+        lines.push("- Standalone Node.js/Python API on subdomain (e.g., api.domain.com)");
+        lines.push("- Front-end is static export on main domain");
+        lines.push("- API deployed separately");
+        lines.push("- **Guide:** pleskDeployment.md (External API section)\\n");
+        
+        lines.push("**Action Required:** Update project/info.md with your backend pattern choice.\\n");
+      }
+      
+      if (criticalIssues.length > 0) {
+        lines.push("## 🚨 Critical Issues\\n");
+        criticalIssues.forEach(issue => lines.push(issue));
+        lines.push("");
+      }
+      
+      lines.push("## Deployment Readiness Checklist\\n");
+      checklist.forEach(item => {
+        const emoji = item.status === "complete" ? "✅" : item.status === "n/a" ? "➖" : "❌";
+        lines.push(`${emoji} **${item.title}**`);
+        lines.push(`   ${item.details}\\n`);
+      });
+      
+      const incompleteCount = checklist.filter(i => i.status === "incomplete").length;
+      lines.push(`\\n**Status:** ${readyToDeploy ? "✅ Ready to deploy" : `❌ ${incompleteCount} item(s) need attention`}\\n`);
+      
+      lines.push("## Next Steps\\n");
+      
+      if (!readyToDeploy) {
+        lines.push("### Before Deployment:\\n");
+        const incomplete = checklist.filter(i => i.status === "incomplete");
+        incomplete.forEach((item, idx) => {
+          lines.push(`${idx + 1}. ${item.title}`);
+          lines.push(`   ${item.details}\\n`);
+        });
+      }
+      
+      if (backendPattern === "none") {
+        lines.push("### Static-Only Deployment Workflow:\\n");
+        lines.push("1. ✅ Set \\`expo.web.output = 'static'\\` (or 'single') in app.json");
+        lines.push("2. ✅ Run \\`npx expo export -p web\\`");
+        lines.push("3. ✅ Verify \\`dist/\\` folder exists with index.html");
+        lines.push("4. ✅ Upload contents of \\`dist/\\` to \\`/httpdocs\\` in Plesk");
+        lines.push("5. ✅ Test: \\`https://your-domain.com/\\`\\n");
+        lines.push("**No server required** - just static file hosting.\\n");
+      } else if (backendPattern === "expo-api-routes") {
+        lines.push("### Expo API Routes Deployment Workflow:\\n");
+        lines.push("1. ✅ Set \\`expo.web.output = 'server'\\` in app.json");
+        lines.push("2. ✅ Create/verify server.js with Express \\`'*'\\` pattern (NOT \\`'/{*all}'\\`)");
+        lines.push("3. ✅ Run \\`npx expo export -p web\\`");
+        lines.push("4. ✅ Verify \\`dist/client/\\` and \\`dist/server/\\` folders exist");
+        lines.push("5. ✅ Upload server.js, package.json, package-lock.json, dist/ to Plesk");
+        lines.push("6. ✅ Configure Plesk Node.js settings:");
+        lines.push("   - Document Root: \\`/dist/client\\`");
+        lines.push("   - Application Root: \\`/\\`");
+        lines.push("   - Startup File: \\`server.js\\`");
+        lines.push("   - Environment: \\`NODE_ENV=production\\`");
+        lines.push("7. ✅ Run **NPM install** in Plesk");
+        lines.push("8. ✅ Click **Restart App**");
+        lines.push("9. ✅ Test routes: \\`/\\` (app) and \\`/api/[endpoint]\\` (API)\\n");
+      } else if (backendPattern === "external-api") {
+        lines.push("### External API Deployment Workflow:\\n");
+        lines.push("**Front-end (main domain):**");
+        lines.push("1. ✅ Set \\`expo.web.output = 'static'\\` in app.json");
+        lines.push("2. ✅ Run \\`npx expo export -p web\\`");
+        lines.push("3. ✅ Upload \\`dist/\\` contents to \\`/httpdocs\\`\\n");
+        lines.push("**API (subdomain, e.g., api.domain.com):**");
+        lines.push("1. ✅ Build API server (e.g., \\`./scripts/build-api-server.ps1\\`)");
+        lines.push("2. ✅ Upload API files to \\`/server\\` on subdomain");
+        lines.push("3. ✅ Configure Plesk Node.js app on subdomain");
+        lines.push("4. ✅ Run **NPM install** and **Restart App**");
+        lines.push("5. ✅ Test API: \\`https://api.domain.com/health\\`\\n");
+        lines.push("**See pleskDeployment.md for detailed external API setup.**\\n");
+      }
+      
+      // Only show code examples for Expo API routes pattern
+      if (backendPattern === "expo-api-routes") {
+        lines.push("## Required Files (Expo API Routes)\\n");
+        lines.push("**server.js** (MUST use Express wildcard):");
+        lines.push("```javascript");
+        lines.push("#!/usr/bin/env node");
+        lines.push("const path = require('path');");
+        lines.push("const express = require('express');");
+        lines.push("const compression = require('compression');");
+        lines.push("const morgan = require('morgan');");
+        lines.push("const { createRequestHandler } = require('expo-server/adapter/express');");
+        lines.push("");
+        lines.push("const CLIENT_BUILD_DIR = path.join(process.cwd(), 'dist/client');");
+        lines.push("const SERVER_BUILD_DIR = path.join(process.cwd(), 'dist/server');");
+        lines.push("");
+        lines.push("const app = express();");
+        lines.push("app.use(compression());");
+        lines.push("app.disable('x-powered-by');");
+        lines.push("app.use(morgan('tiny'));");
+        lines.push("app.use(express.static(CLIENT_BUILD_DIR, { maxAge: '1h' }));");
+        lines.push("");
+        lines.push("// ⚠️ CRITICAL: Use Express wildcard '*' NOT Expo Router '/{*all}'");
+        lines.push("app.all('*', createRequestHandler({ build: SERVER_BUILD_DIR }));");
+        lines.push("");
+        lines.push("const port = process.env.PORT || 3000;");
+        lines.push("app.listen(port, () => console.log(`Server listening on port ${port}`));");
+        lines.push("```\\n");
+        
+        lines.push("**package.json dependencies:**");
+        lines.push("```json");
+        lines.push('{"dependencies": {');
+        lines.push('  "express": "^4.18.0",');
+        lines.push('  "expo-server": "latest",');
+        lines.push('  "compression": "^1.7.4",');
+        lines.push('  "morgan": "^1.10.0"');
+        lines.push("}}");
+        lines.push("```\\n");
+        
+        lines.push("## Common Issues & Solutions\\n");
+        lines.push("**404 on all routes:**");
+        lines.push("- Check server.js uses \\`app.all('*', ...)\\` NOT \\`app.all('/{*all}', ...)\\`");
+        lines.push("- Verify dist/client/ and dist/server/ exist");
+        lines.push("- Check Plesk logs for startup errors\\n");
+        
+        lines.push("**Cannot find module errors:**");
+        lines.push("- Run **NPM install** in Plesk Node.js settings");
+        lines.push("- Verify package.json was uploaded\\n");
+        
+        lines.push("**Static files not loading:**");
+        lines.push("- Verify Document Root is \\`/dist/client\\`");
+        lines.push("- Check Application Root is \\`/\\` (contains server.js)\\n");
+      }
+      
+      lines.push("📖 **Full guides:**");
+      lines.push("- Expo API routes: \\`plesk-api-routes-deploy\\` guide");
+      lines.push("- External API: \\`plesk-deployment\\` guide");
+      lines.push("- Static only: \\`plesk-deployment\\` guide");
+      
+      return {
+        content: [
+          {
+            type: "text",
+            text: lines.join("\\n")
           }
         ]
       };

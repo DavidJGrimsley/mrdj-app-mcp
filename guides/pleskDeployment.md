@@ -2,6 +2,27 @@
 
 _Disclaimer: Plesk is serving the **static web export** of the Expo app, not running the Expo app/SSR. Expo Router SSR has not been made to work on Plesk yet._
 
+## Overview: Three Deployment Patterns
+
+### 1. Static Web Only (No Backend)
+- Build: `npx expo export -p web` with `expo.web.output = "static"` or `"single"`
+- Deploy: Upload `dist/` contents to `/httpdocs`
+- No API routes, all data from external services or client-side
+
+### 2. Expo Router API Routes (Same Domain)
+- Build: `npx expo export -p web` with `expo.web.output = "server"`
+- Deploy: Upload server.js + dist/ to Application Root, configure Node.js app
+- **See [pleskApiRoutesDeploy.md](pleskApiRoutesDeploy.md) for complete guide**
+- API routes live on same domain as app (e.g., `pokepages.app/api/content`)
+
+### 3. External API (Subdomain)
+- Standalone Node.js or Python API on subdomain (e.g., `api.pokepages.app`)
+- Front-end is static export on main domain
+- API built and deployed separately
+- This document covers this pattern below
+
+---
+
 ## Static Web (primary pokepages.app)
 - Build: `npx expo export -p web` (produces `dist/`).
 - Deploy: drag-and-drop contents of `dist/` into `/httpdocs` in Plesk File Manager (or `rsync`/SFTP if preferred).
@@ -9,7 +30,8 @@ _Disclaimer: Plesk is serving the **static web export** of the Expo app, not run
 - Cache busting: exports include hashed assets; no extra step needed. If you see stale assets, clear the Plesk caching layer/CDN if enabled.
 - Rollback: keep dated `dist` zips; re-upload prior archive if needed.
 
-## API / Node.js (subdomain api.pokepages.app)
+## External API / Node.js (subdomain api.pokepages.app)
+**Pattern:** Standalone API server on subdomain, separate from Expo app.
 - Host path: `/server` on the subdomain.
 - Runtime: Node 22.x (per Plesk UI); package manager `npm`.
 - Start file: `api-server.js`; start scripts also available (`start-api-server.bat/.sh`).
@@ -83,7 +105,11 @@ location = /public-facing/api/quantum/openapi.yaml {
 - Replace `/public-facing/api/quantum/` pattern with your API namespace
 
 ## Operational Notes
-- Static vs API separation: static site lives in `/httpdocs`; API runtime lives in `/server` (subdomain). Avoid mixing.
+- **Deployment pattern choice:**
+  - **No backend:** Static export only, all data from external services
+  - **Expo API routes:** See [pleskApiRoutesDeploy.md](pleskApiRoutesDeploy.md) - API on same domain
+  - **External API:** This guide - API on subdomain, separate deployment
+- Static vs API separation: static site lives in `/httpdocs`; external APIs live in `/server` (subdomain). Avoid mixing.
 - SSR status: not supported yet on this Plesk setup; treat web as exported static.
 - Deploy cadence: keep dated archives for both static exports and API builds for quick rollback.
 - Health checks: ensure `/health` and `/health/test-db` stay reachable on the API; add simple uptime monitor hitting the subdomain.

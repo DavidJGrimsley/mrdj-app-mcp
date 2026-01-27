@@ -54,6 +54,12 @@ const PORTFOLIO_PROMPTS = [
         title: "Routing checklist",
         description: "Provide an Expo Router checklist for a screen or flow",
         args: ["route"]
+    },
+    {
+        name: "type-check-and-lint",
+        title: "Type Check and Lint Fixer",
+        description: "Iteratively fix TypeScript type errors and ESLint issues until the project is clean",
+        args: []
     }
 ];
 const PORTFOLIO_ENDPOINTS = [
@@ -115,7 +121,12 @@ const guides = [
     { id: "offline-first", title: "Offline First", fileName: "offlineFirst.md", description: "Conflict resolution, sync strategy, storage, and NetInfo guidance." },
     { id: "app-naming", title: "App Naming", fileName: "appNaming.md", description: "Complete checklist for updating app names in package.json, app.json, manifest, and bundle identifiers." },
     { id: "plesk-deployment", title: "Plesk Deployment", fileName: "pleskDeployment.md", description: "Plesk web/API deployment steps, env management, and rollback notes." },
+    { id: "plesk-api-routes-deploy", title: "Plesk API Routes Deploy", fileName: "pleskApiRoutesDeploy.md", description: "Critical guide for deploying Expo Router apps with API routes (server output) to Plesk VPS." },
     { id: "build-scripts", title: "Build Scripts", fileName: "buildScripts.md", description: "Sitemap generator and API build workflows." },
+    { id: "type-check-and-lint", title: "Type Check and Lint", fileName: "typeCheckAndLint.md", description: "Iterative workflow for fixing TypeScript type errors and ESLint issues." },
+    { id: "icons", title: "Icons", fileName: "icons.md", description: "Asset checklist, icon naming, SmartUtilify copy scripts, PWA icon paths." },
+    { id: "pwa", title: "PWA", fileName: "pwa.md", description: "Progressive Web App setup, manifest, service worker, auto-updates, theme-color." },
+    { id: "backend-best-practices", title: "Backend Best Practices", fileName: "backendBestPractices.md", description: "API design, error handling, validation, security." },
     { id: "index", title: "Index", fileName: "index.md", description: "Top-level index linking all copilot guides." },
     { id: "general", title: "General (legacy)", fileName: "general.md", description: "Older combined guidance; superseded by topic-specific guides." }
 ];
@@ -279,6 +290,70 @@ server.registerPrompt("routing-checklist", {
                 content: {
                     type: "text",
                     text: `Build a routing checklist for ${route}. Include: segment path, layout files, middleware/guards, search params, modals/sheets, head metadata, deep links, and testing steps. Reference: ${routingUri}.`
+                }
+            }
+        ]
+    };
+});
+server.registerPrompt("type-check-and-lint", {
+    title: "Type Check and Lint Fixer",
+    description: "Iteratively fix TypeScript type errors and ESLint issues until the project is clean",
+    argsSchema: {
+        projectRoot: z.string().optional().describe("Absolute path to project root. If omitted, use current workspace root.")
+    }
+}, async ({ projectRoot }) => {
+    const guideUri = toFileUri(path.join(guidesDir, guideMap.get("type-check-and-lint")?.fileName ?? ""));
+    return {
+        messages: [
+            {
+                role: "assistant",
+                content: {
+                    type: "text",
+                    text: `You are a TypeScript and ESLint expert. Follow the workflow in ${guideUri} to systematically fix all type and lint errors. Work iteratively until the project is completely clean.`
+                }
+            },
+            {
+                role: "user",
+                content: {
+                    type: "text",
+                    text: `PROJECT ROOT: ${projectRoot || "USE_CURRENT_WORKSPACE_ROOT"}
+
+EXECUTE THIS WORKFLOW UNTIL COMPLETE:
+
+PHASE 1: TypeScript Type Checking
+1. Run: npx tsx --type-check (or tsc --noEmit)
+2. Analyze all errors - group by file and type
+3. Fix errors systematically:
+   - Start with foundational files (types, interfaces, utils)
+   - Fix type mismatches, missing annotations, null checks
+   - Add proper type assertions and imports
+4. Re-run type check
+5. REPEAT steps 1-4 until zero type errors
+
+PHASE 2: Linting
+6. Run: npm run lint --fix
+7. Review any remaining lint errors
+8. Fix errors that couldn't be auto-fixed:
+   - Remove unused variables/imports
+   - Fix complexity issues
+   - Address accessibility violations
+   - Fix React Hooks dependencies
+9. Run: npm run lint
+10. REPEAT steps 6-9 until zero lint errors
+
+FINAL VERIFICATION:
+- Run both: npx tsx --type-check AND npm run lint
+- Confirm zero errors in both
+- Report completion summary
+
+BEST PRACTICES:
+- Make incremental changes, test frequently
+- Fix dependency files before application code
+- Look for error patterns to batch similar fixes
+- Use specific types, avoid 'any'
+- Group related fixes logically
+
+DO NOT STOP until both type checking and linting pass with zero errors.`
                 }
             }
         ]
