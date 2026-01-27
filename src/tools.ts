@@ -1,6 +1,6 @@
 import { z } from "zod";
 import path from "node:path";
-import { mkdir, readFile, writeFile, unlink } from "node:fs/promises";
+import { mkdir, readFile, writeFile, unlink, access } from "node:fs/promises";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { ConvertStylingInputSchema, runConvertStylingTool } from "./convertStyling.js";
 import { loadGuide, toFileUri } from "./guideUtils.js";
@@ -3166,7 +3166,7 @@ export function registerTools(params: {
       
       // Ensure MCP code folder exists
       try {
-        await access(mcpCodeDir);
+        await access(mcpCodeDir, 0); // F_OK = 0, check if path exists
       } catch {
         return {
           content: [
