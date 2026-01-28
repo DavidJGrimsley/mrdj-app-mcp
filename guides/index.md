@@ -14,6 +14,8 @@ These guides now reflect DJsPortfolio conventions (Expo Router + Uniwind, `manif
 - [icons.md](icons.md) — Asset checklist, icon naming, SmartUtilify copy scripts, PWA icon paths.
 - [pwa.md](pwa.md) — Progressive Web App setup, manifest, service worker, auto-updates, theme-color.
 - [buildScripts.md](buildScripts.md) — Local build/export scripts, sitemap generation, API server build.
+- [SDK54expoSSR.md](SDK54expoSSR.md) — Expo Router SSR (SDK 54) server output guide.
+- [SDK55expoSSR.md](SDK55expoSSR.md) — Expo Router SSR (SDK 55) server rendering alpha guide.
 - [pleskDeployment.md](pleskDeployment.md) — How we deploy static web builds and the API on Plesk.
 - [pleskApiRoutesDeploy.md](pleskApiRoutesDeploy.md) — **Expo Router API routes deployment to Plesk (server output mode).**
 - [metaTags.md](metaTags.md) — SEO, Open Graph, Twitter Cards, dynamic meta tags.

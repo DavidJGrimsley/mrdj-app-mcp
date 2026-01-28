@@ -2,7 +2,7 @@
 node_modules/
 
 # Build artifacts (uncomment if you don't want to track compiled JS)
-# build/
+build/
 
 # Logs & coverage
 *.log
